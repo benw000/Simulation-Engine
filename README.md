@@ -55,8 +55,8 @@ People are initialised at random points in the classroom, and make their way to 
 
 **Forces**
 - Constant attraction force to an individual's chosen target exit.
-- Repulsion force between people - active within a personal space threshold, scales with $ \frac{1}{Distance}$
-- Repulsion force from walls - also active within a threshold, scales with $ \frac{1}{Distance^2}$
+- Repulsion force between people - active within a personal space threshold, scales with $\frac{1}{Distance}$
+- Repulsion force from walls - also active within a threshold, scales with $\frac{1}{Distance^2}$
 - Deflection force from walls - force acting along length of wall towards an individual's target, prevents gridlock when a wall directly obscures the target.
 - Stochastic force - a small amount of noise is applied.
 - Note that additional bespoke forces would have to be specified in order to encode more intelligent, calculating behaviour.
@@ -89,7 +89,7 @@ Prey (white) and predator (red) birds are initialised at random points. The pred
 **Forces**
 - Constant attraction force on predators towards closest prey, and repulsion on prey away from all predators.
 - Constant attraction force on prey towards the centre of mass of all prey birds - this encodes flocking behaviour.
-- Repulsion force between birds - active within a personal space threshold, scales with $ \frac{1}{Distance}$.
+- Repulsion force between birds - active within a personal space threshold, scales with $\frac{1}{Distance}$.
 - Stochastic force - a fair amount of noise is applied to the prey, to simulate erratic movements to throw off predators. Less noise is applied to the predators, which are very direct.
 
 --- 
