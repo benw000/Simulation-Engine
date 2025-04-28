@@ -113,8 +113,8 @@ def main(args):
     elif type == "springs":
         Environment.background_type = "room"
         Particle.delta_t = 0.05
-        Particle.walls_x_lim = 50
-        Particle.walls_y_lim = 50
+        Particle.walls_x_lim = 160
+        Particle.walls_y_lim = 40
         for i in range(num):
             Solid()
         Particle.track_com = True
@@ -178,8 +178,13 @@ def main(args):
 
 
     else:
-        fig, ax = plt.subplots(figsize=[7,7])
+        fig, ax = plt.subplots()#figsize=[20,15])
+        inverse_aspect_ratio = Particle.walls_y_lim/Particle.walls_x_lim
+        window_x_size = 20
+        #fig.set_size_inches(window_x_size,window_x_size*inverse_aspect_ratio)
+        fig.set_size_inches(20,20)
     fig.canvas.set_window_title(window_title)
+    fig.tight_layout()
     ax.set_xlim(-1, Particle.walls_x_lim+1)  # Set x-axis limits
     ax.set_ylim(-1, Particle.walls_y_lim+1)  # Set y-axis limits
     scat = ax.scatter([], [])
@@ -205,7 +210,7 @@ def main(args):
         print("\n")
         print(f"Saved simulation as mp4 at {mp4_path}.")
 
-    plt.show()
+    #plt.show()
 
 
     # Generate list of instances for each desired class

@@ -10,7 +10,7 @@ class Solid(Particle):
     # Attributes
 
     # Forces
-    spring_length = 10 # use 12
+    spring_length = 12 # use 12 or 10
     spring_constant = 3
     damping_constant = 2.5
     random_force = 0.01
@@ -167,7 +167,8 @@ class Solid(Particle):
         '''
         # Get plot position of self in frame with COM
         plot_position = self.position
-        size = 15**2
+        size = 12**2 # 15**2
+        default_line_width = 2
         if (com is not None) and (scale is not None):
             plot_position = self.orient_to_com(com, scale)
             size = np.max([size*Particle.walls_x_lim/scale,1])
@@ -186,7 +187,7 @@ class Solid(Particle):
                 colour = 'r'
             # Get plot position (changes if COM scaled)
             other_plot_position = other.position
-            linewidth = 3
+            linewidth = default_line_width
             markersize = 1
             if (com is not None) and (scale is not None):
                 other_plot_position = other.orient_to_com(com, scale)

@@ -515,14 +515,15 @@ class Particle:
         ax.clear()
         ax.set_xlim(-1, Particle.walls_x_lim+1.5)  # Set x-axis limits
         ax.set_ylim(-1, Particle.walls_y_lim+1)  # Set y-axis limits
-        ax.set_aspect('equal', adjustable='box')
+        ax.set_aspect('equal', adjustable='datalim')
         seconds = float(Particle.current_time) % 60
         minutes = int(float(Particle.current_time) - seconds)
+        '''
         if minutes<1:
             ax.set_title(f"Time: {round(seconds)}s (Step {Particle.current_step})")
         else:
             ax.set_title(f"Time: {minutes} mins, {round(seconds,1)}s (Step {Particle.current_step})")
-
+        '''
         # Call upon Environment class to draw the frame's backdrop
         Environment.draw_backdrop(ax)
 
