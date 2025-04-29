@@ -1,6 +1,5 @@
 import os
 import csv
-import copy
 import numpy as np
 
 
