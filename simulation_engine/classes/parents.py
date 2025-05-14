@@ -10,28 +10,12 @@ class Particle:
     # -------------------------------------------------------------------------
     # Attributes
 
-    # Class attributes for managing population and state
-    pop_counts_dict = {} 
-    max_ids_dict = {}
-    all = {}
-    # Dictionary for tracking kills for each timestep
-    kill_count = 0
-    kill_record = {0:0}
-    num_evacuees = 0 
-    # Registry for child classes
-    child_classes = {}
+    # Manager
+    manager = None
 
-    prototypes = {}
-
-    # Track time and time step
-    delta_t = 0.01
-    current_time = 0
-    current_step: int = 0
-    num_timesteps: int = 100
-
-    # Basic wall boundaries (Region is [0,walls_x_lim]X[0,walls_y_lim] )
-    walls_x_lim: float = 100
-    walls_y_lim: float = 100
+    # Default wall boundaries (Region is [0,env_x_lim]X[0,env_y_lim] )
+    env_x_lim: float = 100
+    env_y_lim: float = 100
 
     # Bools for tracking COM or torus points
     track_com: bool = False
@@ -47,15 +31,24 @@ class Particle:
         Start with random position, and zero velocity and zero acceleration.
         Set an ID value and then increment dictionaries
         '''
+        # ---- ID ----
         self.alive=1
-        # ---------------
-        # Motion
+
+        # Indexing for this instance
+        self._initialize_instance(id)
+
+        # TODO: Access state dict to get next ID, turn into function
+        id = 1
+        # TODO: Add self to state dictionary with newest ID
+        self.manager.state[self.__class__.__name__][id] = self
+
+        # ---- Motion ----
         self.max_speed = None
         self.just_reflected = False
 
         # If no starting position given, assign random within 2D wall limits
         if position is None:
-            self.position = np.array([np.random.rand(1)[0]*(self.walls_x_lim),np.random.rand(1)[0]*self.walls_y_lim])
+            self.position = np.array([np.random.rand(1)[0]*(self.env_x_lim),np.random.rand(1)[0]*self.env_y_lim])
         else:
             self.position = position
 
@@ -72,11 +65,11 @@ class Particle:
         # Initialise acceleration as attribute
         self.acceleration = np.zeros(2)
 
-        # Indexing for this instance
-        self._initialize_instance(id)
+        
 
     def _initialize_instance(self,id):
         """Initialize instance-specific attributes."""
+        # TODO: Move any useful stuff here to manager, refactor to make less hacky
 
         # Get Child class name of current instance
         class_name = self.__class__.__name__
@@ -105,7 +98,7 @@ class Particle:
 
     # -------------------------------------------------------------------------
     # Instance management utilities
-    # TODO: Make some of these hidden!
+    # TODO: Make these hidden and move to Manager when possible
 
     @classmethod
     def get_count(cls):
@@ -143,25 +136,10 @@ class Particle:
         for instance in Particle.all.get(cls.__name__, {}).values():
             if instance.alive == 1:
                 yield instance
+    
+    # -------------------------------------------------------------------------
+    # Dunder
 
-    @staticmethod
-    def iterate_all_instances():
-        ''' Iterate over all existing child instances. '''
-        for class_instances in Particle.all.values():
-            for instance in class_instances.values():
-                if instance.alive == 1:
-                    yield instance
-        '''
-        # Create big flattened dictionary with all child instances
-        dict_list = {}
-        for i in Particle.all.values():
-            dict_list.update(i)
-        # Create generator through the dictionary values (instances)
-        for id, instance in dict_list.items():
-            if instance.alive == 1:
-                yield instance
-        '''
-        
     def __str__(self) -> str:
         ''' Print statement for particles. '''
         if self.alive==1:
@@ -178,7 +156,6 @@ class Particle:
 
     # -------------------------------------------------------------------------
     # Distance utilities
-
     
     '''
     Periodic boundaries -> We have to check different directions for shortest dist.
@@ -190,7 +167,7 @@ class Particle:
             x | x | x
     We work from top right, going clockwise.
     '''
-    up, right = np.array([0,walls_y_lim]), np.array([walls_x_lim,0])
+    up, right = np.array([0,env_y_lim]), np.array([env_x_lim,0])
     torus_offsets = [np.zeros(2), up+right, right, -up+right, -up, -up-right, -right, up-right, up]
 
     def torus_dist(self,other):
@@ -243,8 +220,8 @@ class Particle:
     def torus_wrap(self):
         ''' Wrap coordinates into Torus world with modulo functions'''
         x,y = self.position
-        x = x % Particle.walls_x_lim
-        y = y % Particle.walls_y_lim
+        x = x % Particle.env_x_lim
+        y = y % Particle.env_y_lim
         self.position = np.array([x,y])
 
     @classmethod
@@ -290,67 +267,48 @@ class Particle:
      
     def orient_to_com(self, com, scale):
         ''' Affine translation on point coordinates to prepare for plotting.  '''
-        centre = np.array([0.5*Particle.walls_x_lim, 0.5*Particle.walls_y_lim])
+        centre = np.array([0.5*Particle.env_x_lim, 0.5*Particle.env_y_lim])
         term = np.min(centre)
         return centre + (self.position - com) *0.9*term/scale #* 1/scale
 
     # -------------------------------------------------------------------------
     # Main timestep function
 
-    @staticmethod
-    def timestep_update():
+    def update(self):
         '''
-        Main timestep function. 
-        - Calls each child class instance to update its acceleration,
-            according to its own force rules. 
         - Uses 'Verlet Integration' timestepping method, predicting instance's position after a 
             timestep using its current position, last position, and acceleration:
             x_next = 2*x_now - x_last + acc*(dt)^2
         - Passes predicted new position through checks, including speed limits,
             and torus modulo function on coordinates.
         '''
-        if Particle.torus and Particle.track_com:
-            raise Exception("Sorry, COM tracking on a torus map is not currently supported! Please pick one.")
+        # Let particle update its acceleration 
+        flag = self.update_acceleration()
+        if flag==1:
+            # i has been killed
+            return
+
+        # Find last position from velocity - avoids torus wrapping problems
+        self.last_position = self.position - self.velocity*self.delta_t
+
+        # Verlet Integration
+        # Use tuple unpacking so we dont need a temp variable
+        self.position, self.last_position = 2*self.position - self.last_position +self.acceleration*((self.delta_t)**2), self.position
         
-        for i in Particle.iterate_all_instances():
-            # Let particle update its acceleration 
-            flag = i.update_acceleration()
-            if flag==1:
-                # i has been killed
-                continue
+        # Update velocity
+        displacement = (self.position - self.last_position)
+        self.velocity = displacement/self.delta_t
 
-            # Find last position from velocity - avoids torus wrapping problems
-            i.last_position = i.position - i.velocity*Particle.delta_t
+        # Enforce speed limit
+        if self.max_speed is not None:
+            self.enforce_speed_limit()
 
-            # Verlet Integration
-            # Use tuple unpacking so we dont need a temp variable
-            i.position, i.last_position = 2*i.position - i.last_position +i.acceleration*((Particle.delta_t)**2), i.position
-            
-            # Update velocity
-            displacement = (i.position - i.last_position)
-            i.velocity = displacement/Particle.delta_t
+        # Reduce speed after inelastic collision
+        self.inelastic_collision()
 
-            # Enforce speed limit
-            if i.max_speed is not None:
-                i.enforce_speed_limit()
-
-            # Reduce speed after inelastic collision
-            i.inelastic_collision()
-
-            # Enforce torus wrapping
-            if Particle.torus:
-                i.torus_wrap()
-
-        
-        # Increment time
-        Particle.current_time += Particle.delta_t
-        Particle.current_step += 1
-
-        # Update kill records
-        Particle.kill_record[Particle.current_step] = Particle.kill_count
-
-        # Write state to CSV
-        Particle.write_state_to_csv()
+        # Enforce torus wrapping
+        if Particle.torus:
+            self.torus_wrap()
     
     # -------------------------------------------------------------------------
     # CSV utilities
@@ -512,8 +470,8 @@ class Particle:
 
         # Clear axis between frames, set axes limits again and title
         ax.clear()
-        ax.set_xlim(-1, Particle.walls_x_lim+1.5)  # Set x-axis limits
-        ax.set_ylim(-1, Particle.walls_y_lim+1)  # Set y-axis limits
+        ax.set_xlim(-1, Particle.env_x_lim+1.5)  # Set x-axis limits
+        ax.set_ylim(-1, Particle.env_y_lim+1)  # Set y-axis limits
         ax.set_aspect('equal', adjustable='datalim')
         seconds = float(Particle.current_time) % 60
         minutes = int(float(Particle.current_time) - seconds)
@@ -551,7 +509,7 @@ class Particle:
             ax2.set_xticks(xticks)  # Set ticks at every value in the range
             ax2.set_xlabel("Time (s)")
             ax2.set_title(f"Number evacuated over time")
-            ax2.set_aspect(aspect=Particle.walls_y_lim/Particle.walls_x_lim)
+            ax2.set_aspect(aspect=Particle.env_y_lim/Particle.env_x_lim)
             t_vals = []
             y_vals = []
             for key, item in Particle.kill_record.items():
@@ -586,69 +544,22 @@ class Environment:
     '''
     Class containing details about the simulation environment, walls etc
     '''
-    # Instances
-    walls = []
-    targets = []
-
-    # Background colour for each type of environment
-    background_type = 'sky'
-    background_colour_dict = {"sky": "skyblue",
-                              "space": "k",
-                              "room": "w",
-                              "pool": "lightgreen"}
+    manager = None
+    # TODO: Fill in any shared things between Wall and Target etc
     
-    @staticmethod
-    def draw_background_colour(ax):
-        ax.set_facecolor(Environment.background_colour_dict[Environment.background_type])
-
-    @staticmethod
-    def draw_objects(ax):
-        for wall in Environment.walls:
-            wall.instance_plot(ax)
-        for target in Environment.targets:
-            target.instance_plot(ax)
-
-    @staticmethod
-    def draw_backdrop(ax):
-        '''
-        Called by Particle.animate_timestep to set background for each frame, 
-         before drawing its particle objects over the top.
-        An ax is passed in and we call different functions to draw environment elements
-        '''
-        # Hide border and ticks if using evac 
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.spines['bottom'].set_visible(False)
-        ax.xaxis.set_ticks([])
-        ax.yaxis.set_ticks([])
-
-        if Environment.background_type == 'pool':
-            ax.set_xlim([-2*0.05, 2+2*0.05])
-            ax.set_ylim([-2*0.05, 1+2*0.05])
-            # Plot head string of pool table
-            ax.plot([1.56,1.56],[0,1], c='w', alpha=0.5, linestyle=':')
-            # Plot foot spot
-            ax.scatter(0.64,0.5, c='w', s=10)
-
-
-        Environment.draw_background_colour(ax)
-        Environment.draw_objects(ax)
-
 
 class Wall(Environment):
     '''
     Encodes instance of a wall
     '''
     def __init__(self, a_position, b_position) -> None:
-        super().__init__()
         self.a_position = a_position
         self.b_position = b_position
         self.wall_vec = b_position - a_position
         self.wall_length = np.sqrt(np.sum((self.wall_vec)**2))
         # Get perpendicular vector with 90 degrees rotation anticlockwise
         self.perp_vec = np.array([[0,-1],[1,0]]) @ self.wall_vec
-        Environment.walls += [self]
+        # TODO: Add self to manager
 
     def __str__(self) -> str:
         return f"Wall_[{self.a_position}]_[{self.b_position}]."
