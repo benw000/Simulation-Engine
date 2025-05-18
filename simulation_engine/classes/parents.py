@@ -2,7 +2,6 @@ import os
 import csv
 import numpy as np
 
-
 class Particle:
     '''
     Parent class for particles in a 2D plane
@@ -37,10 +36,8 @@ class Particle:
         # Indexing for this instance
         self._initialize_instance(id)
 
-        # TODO: Access state dict to get next ID, turn into function
-        id = 1
         # TODO: Add self to state dictionary with newest ID
-        self.manager.state[self.__class__.__name__][id] = self
+        self.manager.state["Particle"][self.__class__.__name__][self.id] = self
 
         # ---- Motion ----
         self.max_speed = None
@@ -69,32 +66,28 @@ class Particle:
 
     def _initialize_instance(self,id):
         """Initialize instance-specific attributes."""
-        # TODO: Move any useful stuff here to manager, refactor to make less hacky
-
         # Get Child class name of current instance
         class_name = self.__class__.__name__
         
-        # Population count
-        Particle.pop_counts_dict[class_name] = Particle.pop_counts_dict.get(class_name, 0) + 1
-
         # ID
         if id is not None:
+            # Set input ID
             id = int(id)
             self.id = id
-            if Particle.max_ids_dict[class_name] < id:
-                Particle.max_ids_dict[class_name] = id
         else:            
-            self.id = Particle.max_ids_dict.get(class_name, -1) + 1
-            Particle.max_ids_dict[class_name] = self.id
+            self.id = self.manager.max_ids_dict.get(class_name, -1) + 1
+        # Update max_ids_dict
+        if class_name not in self.manager.max_ids_dict.keys():
+            self.manager.max_ids_dict[class_name] = self.id
+        elif self.manager.max_ids_dict[class_name] < self.id:
+            self.manager.max_ids_dict[class_name] = self.id
 
-        # Add instance to 'all' dict
-        if class_name not in Particle.all:
-            Particle.all[class_name] = {}
-        Particle.all[class_name][self.id] = self
+        # Initialise class name in state dict if not there
+        if class_name not in self.manager.state["Particle"].keys():
+            self.manager.state["Particle"][class_name] = {}
+        self.manager.state["Particle"][class_name][self.id] = self
 
-        # Register the class if it's not already in the registry
-        if class_name not in Particle.child_classes:
-            Particle.child_classes[class_name] = self.__class__
+        
 
     # -------------------------------------------------------------------------
     # Instance management utilities
@@ -103,18 +96,19 @@ class Particle:
     @classmethod
     def get_count(cls):
         ''' Return a class type count. eg  num_birds = Bird.get_count(). '''
-        return Particle.pop_counts_dict.get(cls.__name__, 0)
+        return len(cls.manager.state["Particle"].get(cls.__name__, {}).keys())
     
     @classmethod
     def get_max_id(cls):
         ''' Return a class max id. eg max_id_birds = Bird.get_max_id(). '''
-        return Particle.max_ids_dict.get(cls.__name__, 0)
+        return cls.manager.max_ids_dict.get(cls.__name__, 0)
     
     @classmethod
     def get_instance_by_id(cls, id):
         ''' Get class instance by its id. If id doesn't exist, throw a KeyError.'''
-        if id in Particle.all[cls.__name__]:
-            return Particle.all[cls.__name__][id]
+        existing_class_ids = cls.manager.state["Particle"].get(cls.__name__, {}).keys()
+        if id in existing_class_ids:
+            return cls.manager.state["Particle"][cls.__name__][id]
         else:
             raise KeyError(f"Instance with id {id} not found in {cls.__name__}.")
         
@@ -123,9 +117,8 @@ class Particle:
         Sets the class instance with this id to be not alive, decrements the class count.
         '''
         self.alive=0
-        Particle.pop_counts_dict[self.__class__.__name__] -= 1
-        Particle.kill_count += 1
-        Particle.kill_record[Particle.current_step] = Particle.kill_count
+        # Remove from manager
+        self.manager.state["Particle"][self.__class__.__name__].remove(self.id)
 
     @classmethod
     def iterate_class_instances(cls):
@@ -133,7 +126,7 @@ class Particle:
         # This function is a 'generator' object in Python due to the use of 'yield'.
         # It unpacks each {id: instance} dictionary item within our Particle.all[classname] dictionary
         # It then 'yields' the instance. Can be used in a for loop as iterator.
-        for instance in Particle.all.get(cls.__name__, {}).values():
+        for instance in cls.manager.state["Particle"].get(cls.__name__, {}).values():
             if instance.alive == 1:
                 yield instance
     
@@ -209,12 +202,12 @@ class Particle:
             # Change velocity
             self.velocity *= self.max_speed/speed
             # Change current position to backtrack
-            self.position = self.last_position + self.velocity*Particle.delta_t
+            self.position = self.last_position + self.velocity*self.manager.delta_t
 
     def inelastic_collision(self):
         if self.just_reflected:
             self.velocity *= 0.8
-            self.position = self.last_position + self.velocity*Particle.delta_t
+            self.position = self.last_position + self.velocity*self.manager.delta_t
             self.just_reflected = False
 
     def torus_wrap(self):
@@ -243,7 +236,7 @@ class Particle:
         total_mass = 0
         com = np.zeros(2)
         # Call generator to run over all particle instances
-        for instance in Particle.iterate_all_instances():
+        for instance in Particle.manager.iterate_all_particles():
             mass = instance.mass
             com += mass*instance.position
             total_mass += mass
@@ -256,7 +249,7 @@ class Particle:
         com = Particle.centre_of_mass()
         max_dist = 0.01
         # Call generator to find max dist from COM
-        for instance in Particle.iterate_all_instances():
+        for instance in Particle.manager.iterate_all_particles():
             vec_from_com = instance.position - com
             for i in vec_from_com:
                 if i > max_dist:
@@ -267,9 +260,25 @@ class Particle:
      
     def orient_to_com(self, com, scale):
         ''' Affine translation on point coordinates to prepare for plotting.  '''
+        # Check both not None
+        if com is None or scale is None:
+            return self.position
+        # Transform
         centre = np.array([0.5*Particle.env_x_lim, 0.5*Particle.env_y_lim])
         term = np.min(centre)
         return centre + (self.position - com) *0.9*term/scale #* 1/scale
+    
+    def find_closest_target(self):
+        # Check through list of targets
+        closest_target = None
+        closest_dist = 10**5
+        for target in self.manager.state["Environment"]["Target"]:
+            vec = target.position - self.position
+            dist = np.linalg.norm(vec)
+            if dist < closest_dist:
+                closest_dist = dist
+                closest_target = target
+        return closest_target
 
     # -------------------------------------------------------------------------
     # Main timestep function
@@ -312,9 +321,6 @@ class Particle:
     
     # -------------------------------------------------------------------------
     # CSV utilities
-
-    # CSV path, to be set by main script with datetime for reference
-    csv_path = "my_csv.csv"
 
     @staticmethod
     def write_state_to_csv():
@@ -450,75 +456,6 @@ class Particle:
         #print("-")
         #print("done loading")
         #print(Particle.all)
-        
-    # -------------------------------------------------------------------------
-    # Animation utilities
-
-    @staticmethod
-    def animate_timestep(timestep, ax, ax2=None):
-        '''
-        Draws the state of the current system onto a matplotlib ax object provided.
-        This function will be called by FuncAnimation at each timestep in the main simulation script.
-        Calls upon each child instance to plot itself, 
-        as well as calling the Environment class for backdrop.
-        ''' 
-        # Unpack wrapped ax object
-        ax = ax[0]
-        
-        # Print calculation progress
-        print(f"----- Animation progress: {timestep} / {Particle.num_timesteps} -----" ,end="\r", flush=True)
-
-        # Clear axis between frames, set axes limits again and title
-        ax.clear()
-        ax.set_xlim(-1, Particle.env_x_lim+1.5)  # Set x-axis limits
-        ax.set_ylim(-1, Particle.env_y_lim+1)  # Set y-axis limits
-        ax.set_aspect('equal', adjustable='datalim')
-        seconds = float(Particle.current_time) % 60
-        minutes = int(float(Particle.current_time) - seconds)
-        '''
-        if minutes<1:
-            ax.set_title(f"Time: {round(seconds)}s (Step {Particle.current_step})")
-        else:
-            ax.set_title(f"Time: {minutes} mins, {round(seconds,1)}s (Step {Particle.current_step})")
-        '''
-        # Call upon Environment class to draw the frame's backdrop
-        Environment.draw_backdrop(ax)
-
-        # Load in system state from CSV
-        Particle.load_state_from_csv(timestep)
-
-        # Decide if tracking the COM in each frame
-        if Particle.track_com:
-            com = Particle.centre_of_mass()
-            scene_scale = Particle.scene_scale()
-        else:
-            com, scene_scale = None, None
-
-        # Iterate over child instances in system and plot
-        for instance in Particle.iterate_all_instances():
-            instance.instance_plot(ax,com,scene_scale)
-        
-        # Plot second graph
-        if ax2 is not None:
-            ax2 = ax2[0]
-            ax2.clear()
-            max_time = int(Particle.num_timesteps)*Particle.delta_t
-            ax2.set_xlim(0, max_time)  # Set x-axis limits
-            ax2.set_ylim(0, Particle.num_evacuees) 
-            xticks = [i for i in range(int(max_time)) if i % 5 == 0] + [max_time]  # Positions where you want the labels
-            ax2.set_xticks(xticks)  # Set ticks at every value in the range
-            ax2.set_xlabel("Time (s)")
-            ax2.set_title(f"Number evacuated over time")
-            ax2.set_aspect(aspect=Particle.env_y_lim/Particle.env_x_lim)
-            t_vals = []
-            y_vals = []
-            for key, item in Particle.kill_record.items():
-                if key <= timestep:
-                    t_vals += [int(key)*Particle.delta_t]
-                    y_vals += [item]
-            ax2.plot(t_vals, y_vals, c='b')
-            ax2.scatter(int(timestep)*Particle.delta_t,Particle.kill_record[timestep], marker='x', c='r')
-
 
 
 
@@ -545,21 +482,27 @@ class Environment:
     Class containing details about the simulation environment, walls etc
     '''
     manager = None
+    def __init__(self):
+        # Add self to manager
+        self.manager.state[self.__class__.__name__].append(self)
     # TODO: Fill in any shared things between Wall and Target etc
+
     
 
 class Wall(Environment):
     '''
     Encodes instance of a wall
     '''
-    def __init__(self, a_position, b_position) -> None:
+    def __init__(self, a_position, b_position, line_colour='k', edge_colour='r') -> None:
+        super.__init__()
         self.a_position = a_position
         self.b_position = b_position
         self.wall_vec = b_position - a_position
         self.wall_length = np.sqrt(np.sum((self.wall_vec)**2))
+        self.line_colour = line_colour
+        self.edge_colour = edge_colour
         # Get perpendicular vector with 90 degrees rotation anticlockwise
         self.perp_vec = np.array([[0,-1],[1,0]]) @ self.wall_vec
-        # TODO: Add self to manager
 
     def __str__(self) -> str:
         return f"Wall_[{self.a_position}]_[{self.b_position}]."
@@ -567,12 +510,8 @@ class Wall(Environment):
     def instance_plot(self, ax):
         x_vals = np.array([self.a_position[0], self.b_position[0]])
         y_vals = np.array([self.a_position[1], self.b_position[1]])
-        if Environment.background_type == "pool":
-            ax.plot(x_vals, y_vals, c='brown')
-            ax.scatter(x_vals,y_vals,s=20,c='brown')
-        else:
-            ax.plot(x_vals, y_vals, c='k')
-            ax.scatter(x_vals,y_vals,s=20,c='r')
+        ax.plot(x_vals, y_vals, c=self.line_colour)
+        ax.scatter(x_vals,y_vals,s=20,c=self.edge_colour)
 
     def dist_to_wall(self, particle: Particle):
         '''
@@ -619,34 +558,14 @@ class Target(Environment):
     '''
     Encodes instance of a target
     '''
-    def __init__(self, position, capture_radius= 0.5) -> None:
+    def __init__(self, position, capture_radius= 0.5, colour='g') -> None:
         super().__init__()
         self.position = position
         self.capture_thresh = capture_radius**2
-        Environment.targets += [self]
+        self.colour = colour
 
     def __str__(self) -> str:
         return f"Target_[{self.position}]_[{self.capture_thresh}]]."
 
     def instance_plot(self, ax):
-        if Environment.background_type == "pool":
-            ax.scatter(self.position[0],self.position[1],s=20, c='k', marker='x')
-        else:
-            ax.scatter(self.position[0],self.position[1],s=20, c='g', marker='x')
-    
-    def dist_to_target(self, particle: Particle):
-        vec = self.position - particle.position
-        dist = np.linalg.norm(vec)
-        return dist, vec
-    
-    @staticmethod
-    def find_closest_target(particle: Particle):
-        closest_target = None
-        closest_dist = 10**5
-        for target in Environment.targets:
-            dist, _ = target.dist_to_target(particle)
-            if dist < closest_dist:
-                closest_dist = dist
-                closest_target = target
-        return closest_target
-
+        ax.scatter(self.position[0],self.position[1],s=20, c=self.colour, marker='x')
