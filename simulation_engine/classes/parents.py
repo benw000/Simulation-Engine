@@ -320,8 +320,20 @@ class Particle:
             self.torus_wrap()
     
     # -------------------------------------------------------------------------
+    # LOGGING
+
+    def to_dict(self):
+        new_dict = {
+            "position":self.position,
+            "last_position":self.last_position,
+            "velocity":self.velocity,
+            "acceleration":self.acceleration,
+        }
+        return new_dict
+    # -------------------------------------------------------------------------
     # CSV utilities
 
+    
     @staticmethod
     def write_state_to_csv():
         '''
@@ -487,6 +499,11 @@ class Environment:
         self.manager.state[self.__class__.__name__].append(self)
     # TODO: Fill in any shared things between Wall and Target etc
 
+    def to_dict(self):
+        new_dict = {
+        }
+        return new_dict
+
     
 
 class Wall(Environment):
@@ -553,6 +570,24 @@ class Wall(Environment):
         x_to_wall = projection - x
         return np.sqrt(np.sum(x_to_wall**2)), -x_to_wall
     
+    # LOGGING
+    def to_dict(self):
+        parent_dict = super().to_dict()
+        new_dict = {
+            "a_position":self.a_position,
+            "b_position":self.b_position,
+            "line_colour":self.line_colour,
+            "edge_colour":self.edge_colour
+        }
+        return parent_dict | new_dict
+    
+    @classmethod
+    def from_dict(cls, new_dict):
+        return cls(a_position=new_dict["a_position"],
+                   b_position=new_dict["b_position"],
+                   line_colour=new_dict["line_colour"],
+                   edge_colour=new_dict["edge_colour"])
+
 
 class Target(Environment):
     '''
@@ -569,3 +604,19 @@ class Target(Environment):
 
     def instance_plot(self, ax):
         ax.scatter(self.position[0],self.position[1],s=20, c=self.colour, marker='x')
+
+    # LOGGING
+    def to_dict(self):
+        parent_dict = super().to_dict()
+        new_dict = {
+            "position":self.position,
+            "capture_radius":self.capture_radius,
+            "colour":self.colour
+        }
+        return parent_dict | new_dict
+    
+    @classmethod
+    def from_dict(cls, new_dict):
+        return cls(position=new_dict["position"],
+                   capture_radius=new_dict["capture_radius"],
+                   colour=new_dict["colour"],)
