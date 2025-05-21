@@ -1,4 +1,5 @@
 import numpy as np
+import json
 from pathlib import Path
 import datetime
 from simulation_engine.classes.parents import Particle, Environment, Wall, Target
@@ -111,23 +112,11 @@ class Manager:
     # =============================================================
 
     # ---- LOGGING ----
-    def append_state_to_json(self):
-        if not self.json_path.exists():
-            # TODO: Initialise file with python touch equivalent
-            # Can we append to JSON without having to read it? 
-            # Could we store in SQL db?
-            pass
+    def complete_state(self):
+        # TODO: Add extra metadata to the Manager.state
+        # Called before logging
+        raise NotImplementedError
     
-    # ---- LOADING ----
-    def load_timestep(self, timestep):
-        # Try loading state from history, if fails try from JSON
-        if self.store_history:
-            self.state = self.history[timestep]
-        # Load from JSON
-        else:
-            # TODO: Read from JSON when history not saved
-            raise NotImplementedError("Reading state from JSON not implemented yet")
-
     # =============================================================
     
     # ---- MATPLOTLIB PLOTTING ----
@@ -304,4 +293,134 @@ class Manager:
     
     draw_graph_plt_func = default_draw_graph_plt
 
+
+# ------------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------
+
+
+class Logger:
+    '''
+    TODO: Docstring here
+    Also remove all the csv
+    Split up these functions into readable structure
+    '''
+    # =============================================================
+
+    # ---- INITIALISATION ---- 
+    def __init__(self, manager, log_path:Path, chunk_size=100, timing=True):
+        # TODO: Validate inputs
+        self.manager = manager
+        self.log_path = log_path
+        if log_path.suffix != '.ndjson':
+            raise NameError(f"Expected log path with extension .ndjson, got {log_path}")
+        self.timing = timing
+        self.log_path = log_path
+        self.chunk_size = chunk_size
+        self.current_chunk = None
+        self.offset_indices: list[int] = []
+
+        # TODO: Build class objects dict for purpose of rebuilding
+        # Actually move this to manager, instantiate in setup
+        self.class_objects_registry = {
+
+        }
+    
+    # =============================================================
+
+    # ---- APPEND ----
+    @staticmethod
+    def create_dict_from_state(state):
+        # Read state nested dict and create JSON format state
+        # This should iterate through everything and call its return dictionary functions
+        new_dict = {}
+        for key, val in state.items():
+            # Create nested dict for Particle and Environment using .to_dict() methods
+            if key in ["Particle", "Environment"]:
+                new_dict[key] = {}
+                if key == "Particle":
+                    for child_class_name, child_class_dict in val.items():
+                        new_dict[key][child_class_name] = {}
+                        for id, child in child_class_dict.items():
+                            new_dict[key][child_class_name][id] = child.to_dict()
+                elif key == "Environment":
+                    for child_class_name, child_class_list in val.items():
+                        new_dict[key][child_class_name] = []
+                        for child in child_class_list:
+                            new_dict[key][child_class_name].append(child.to_dict())
+            # Assuming all other keys are simple
+            else:
+                new_dict[key]=val
+        return new_dict
+    
+    def build_offset_indices(self):
+        # Read the log path and go through, note down byte offsets
+        self.offset_indices = "foobar"
+        raise NotImplementedError
+    
+    def append_current_state(self, state):
+        # Append in open mode to ndjson, without reading, use seek
+        # Figure out if timing is done within state or outside?
+        new_dict = self.create_dict_from_state(state)
+        with open(self.log_path, "r") as f:
+            # TODO: Use seek and read properly, get latest position
+            latest_pos = self.offset_indices[-1]
+            f.seek(latest_pos)
+            f.writelines(self.create_dict_from_state())
+            # TODO: Update the offsets
+        raise NotImplementedError
+
+    # =============================================================
+
+    # ---- READ ----
+    # TODO: Do we need double generator or dataloader?
+    # Want to call get_next_state, which decides whether to load next chunk or not
+    # Work backwards, try work it out without GPT
+
+    def iter_all_states(self):
+        # Loops through chunks, reads through lines and yields states
+        for chunk in self.read_by_chunk():
+            for line in chunk:
+                yield self.load_state_from_dict(line)
+    
+    def read_by_chunk(self):
+        # Reads through final and yields chunks
+        # Read chunk_size many lines if possible from file
+        with open(self.log_path, "r") as f:
+            # Start with empty chunk list
+            chunk = []
+            # Iterate over lines
+            for line in f:
+                # Read each line as JSON string, store in chunk
+                chunk.append(json.loads(line))
+                # Stop at chunk size and yield, clear chunk
+                if len(chunk) == self.chunk_size:
+                    yield chunk
+                    chunk = []
+            # Yield final partial chunk
+            if chunk:
+                yield chunk
+    
+    def load_state_from_dict(self, dict):
+        new_state = {}
+        for key, val in dict.items():
+            # Create nested dict for Particle and Environment using .to_dict() methods
+            if key in ["Particle", "Environment"]:
+                new_state[key] = {}
+                if key == "Particle":
+                    for child_class_name, child_class_dict in val.items():
+                        child_class = self.class_objects_registry[child_class_name]
+                        new_state[key][child_class_name] = {}
+                        for id, child in child_class_dict.items():
+                            new_state[key][child_class_name][id] = child_class.from_dict(child)
+                elif key == "Environment":
+                    for child_class_name, child_class_list in val.items():
+                        child_class = self.class_objects_registry[child_class_name]
+                        new_state[key][child_class_name] = []
+                        for child in child_class_list:
+                            new_state[key][child_class_name].append(child_class.from_dict(child))
+            # Assuming all other keys are simple
+            else:
+                new_state[key]=val
+        return new_state
     
