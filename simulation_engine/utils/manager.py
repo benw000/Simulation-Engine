@@ -43,9 +43,8 @@ class Manager:
         # Initialise max IDs for particle
         self.max_ids_dict = {}
 
-        # Initialise history
-        self.store_history = store_history
-        self.history = []
+        # Initialise child class registry (e.g. "Prey":Prey)
+        self.class_objects_registry = {}
 
         # Time
         self.delta_t = delta_t
@@ -56,29 +55,34 @@ class Manager:
         # Graph
         self.show_graph = show_graph
 
-        # Logging
+        # Log settings
         self.compute_and_animate = compute_and_animate
+        self.store_history = store_history
+        self.history = []
+
+        # NDJSON log
         self.save_json = save_json
+        self.ndjson_path = json_path
+        if self.ndjson_path is None and self.save_json:
+            self.ndjson_path = Path(f"simulation_log_{str(datetime.datetime.now())}.ndjson")
+            self.logger = Logger(self,self.ndjson_path)
+
+        self._state_iterator = None
+        if not self.compute_and_animate:
+            if self.store_history:
+                self._state_iterator = self.history
+            else:
+                self._state_iterator = self.logger.iter_all_states()
+
+        # MP4 Video
         self.save_mp4 = save_mp4
-        self.json_path = json_path
         self.mp4_path = mp4_path
-        if self.json_path is None and self.save_json:
-            self.json_path = Path(f"simulation_log_{str(datetime.datetime.now())}.json")
         if self.mp4_path is None and self.save_mp4:
-            self.json_path = Path(f"simulation_vid_{str(datetime.datetime.now())}.mp4")
+            self.mp4_path = Path(f"simulation_vid_{str(datetime.datetime.now())}.mp4")
         
     # =============================================================
 
     # ---- DUNDER ---- 
-    def __iter__(self):
-        for class_name, class_dict in self.state["Particle"].items():
-            print("DEBUG")
-            print(class_name)
-            print(class_dict)
-            for id, particle in class_dict.items():
-                if particle.alive:
-                    yield particle
-
     def iterate_all_particles(self):
         for class_name, class_dict in self.state["Particle"].items():
             for id, particle in class_dict.items():
@@ -107,15 +111,8 @@ class Manager:
             self.history.append(self.state)
 
         # Write to file
-        self.append_state_to_json()
-    
-    # =============================================================
-
-    # ---- LOGGING ----
-    def complete_state(self):
-        # TODO: Add extra metadata to the Manager.state
-        # Called before logging
-        raise NotImplementedError
+        if self.save_json:
+            self.logger.append_current_state(self.state)
     
     # =============================================================
     
@@ -221,7 +218,7 @@ class Manager:
         if self.compute_and_animate:
             self.update()
         else:
-            self.load_timestep(timestep)
+            self.state = next(self._state_iterator)
 
         # Unpack ax, ax2 from FuncAnimation's wrapper
         ax = ax[0]
@@ -308,29 +305,21 @@ class Logger:
     # =============================================================
 
     # ---- INITIALISATION ---- 
-    def __init__(self, manager, log_path:Path, chunk_size=100, timing=True):
-        # TODO: Validate inputs
-        self.manager = manager
-        self.log_path = log_path
+    def __init__(self, manager, log_path:Path, chunk_size=100, ):
+        # Check path
         if log_path.suffix != '.ndjson':
             raise NameError(f"Expected log path with extension .ndjson, got {log_path}")
-        self.timing = timing
         self.log_path = log_path
+
         self.chunk_size = chunk_size
-        self.current_chunk = None
         self.offset_indices: list[int] = []
-
-        # TODO: Build class objects dict for purpose of rebuilding
-        # Actually move this to manager, instantiate in setup
-        self.class_objects_registry = {
-
-        }
+        self.manager = manager
     
     # =============================================================
 
-    # ---- APPEND ----
+    # ---- READ / WRITE STATE ----
     @staticmethod
-    def create_dict_from_state(state):
+    def write_dict_from_state(state):
         # Read state nested dict and create JSON format state
         # This should iterate through everything and call its return dictionary functions
         new_dict = {}
@@ -352,54 +341,6 @@ class Logger:
             else:
                 new_dict[key]=val
         return new_dict
-    
-    def build_offset_indices(self):
-        # Read the log path and go through, note down byte offsets
-        self.offset_indices = "foobar"
-        raise NotImplementedError
-    
-    def append_current_state(self, state):
-        # Append in open mode to ndjson, without reading, use seek
-        # Figure out if timing is done within state or outside?
-        new_dict = self.create_dict_from_state(state)
-        with open(self.log_path, "r") as f:
-            # TODO: Use seek and read properly, get latest position
-            latest_pos = self.offset_indices[-1]
-            f.seek(latest_pos)
-            f.writelines(self.create_dict_from_state())
-            # TODO: Update the offsets
-        raise NotImplementedError
-
-    # =============================================================
-
-    # ---- READ ----
-    # TODO: Do we need double generator or dataloader?
-    # Want to call get_next_state, which decides whether to load next chunk or not
-    # Work backwards, try work it out without GPT
-
-    def iter_all_states(self):
-        # Loops through chunks, reads through lines and yields states
-        for chunk in self.read_by_chunk():
-            for line in chunk:
-                yield self.load_state_from_dict(line)
-    
-    def read_by_chunk(self):
-        # Reads through final and yields chunks
-        # Read chunk_size many lines if possible from file
-        with open(self.log_path, "r") as f:
-            # Start with empty chunk list
-            chunk = []
-            # Iterate over lines
-            for line in f:
-                # Read each line as JSON string, store in chunk
-                chunk.append(json.loads(line))
-                # Stop at chunk size and yield, clear chunk
-                if len(chunk) == self.chunk_size:
-                    yield chunk
-                    chunk = []
-            # Yield final partial chunk
-            if chunk:
-                yield chunk
     
     def load_state_from_dict(self, dict):
         new_state = {}
@@ -423,4 +364,70 @@ class Logger:
             else:
                 new_state[key]=val
         return new_state
+    
+    # =============================================================
+
+    # ---- APPEND ----
+    def append_current_state(self, state):
+        new_dict = self.create_dict_from_state(state)
+        with open(self.log_path, "a") as f:
+            f.write(json.dumps(new_dict)+"\n")
+
+    # =============================================================
+
+    # ---- YIELD BY CHUNKING ----
+    def _read_by_chunk(self):
+        # Reads through final and yields chunks
+        # Read chunk_size many lines if possible from file
+        with open(self.log_path, "r") as f:
+            # Start with empty chunk list
+            chunk = []
+            # Iterate over lines
+            for line in f:
+                # Read each line as JSON string, store in chunk
+                chunk.append(json.loads(line))
+                # Stop at chunk size and yield, clear chunk
+                if len(chunk) == self.chunk_size:
+                    yield chunk
+                    chunk = []
+            # Yield final partial chunk
+            if chunk:
+                yield chunk
+
+    def iter_all_states(self):
+        # Loops through chunks, reads through lines and yields states
+        for chunk in self._read_by_chunk():
+            for line in chunk:
+                yield self.load_state_from_dict(line)
+    
+    # =============================================================
+
+    # ---- ACCESS PARTICULAR TIMESTEP ----
+    def _build_offset_indices(self):
+        # Read the log path and go through, note down byte offsets
+        offset_indices = []
+        with open(self.log_path, "r") as f:
+            # While not done keep writing offsets
+            while True:
+                # Get cursor position with tell
+                offset = f.tell()
+                # Read a line, break if nothing there
+                line = f.readline()
+                if not line:
+                    break
+                # Add offset to list
+                offset_indices.append(offset)
+        self.offset_indices = offset_indices
+
+    def get_state_at_timestep(self, timestep:int):
+        # Get offset indices
+        if self.offset_indices == []:
+            self._build_offset_indices()
+        # Read file at specific location
+        with open(self.log_path, "r") as f:
+            # Go to cursor offset of desired line
+            f.seek(self.offset_indices[timestep])
+            # Read the line into state
+            line_str = f.readline()
+            return self.load_state_from_dict(json.reads(line_str))
     
