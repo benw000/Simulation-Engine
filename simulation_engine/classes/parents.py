@@ -1,6 +1,8 @@
 import os
 import csv
 import numpy as np
+from rich import print
+
 
 class Particle:
     '''
@@ -24,7 +26,7 @@ class Particle:
     def __init__(self,
                 position: np.ndarray = None,
                 velocity: np.ndarray = None,
-                id = None) -> None:
+                unlinked = False) -> None:
         '''
         Initiate generic particle, with optional position and velocity inputs.
         Start with random position, and zero velocity and zero acceleration.
@@ -34,10 +36,11 @@ class Particle:
         self.alive=1
 
         # Indexing for this instance
-        self._initialize_instance(id)
+        if unlinked:
+            self.id = -1
+        else:
+            self._initialize_instance_id()
 
-        # TODO: Add self to state dictionary with newest ID
-        self.manager.state["Particle"][self.__class__.__name__][self.id] = self
 
         # ---- Motion ----
         self.max_speed = None
@@ -64,18 +67,13 @@ class Particle:
 
         
 
-    def _initialize_instance(self,id):
+    def _initialize_instance_id(self):
         """Initialize instance-specific attributes."""
         # Get Child class name of current instance
         class_name = self.__class__.__name__
         
-        # ID
-        if id is not None:
-            # Set input ID
-            id = int(id)
-            self.id = id
-        else:            
-            self.id = self.manager.max_ids_dict.get(class_name, -1) + 1
+        # ID     
+        self.id = self.manager.max_ids_dict.get(class_name, -1) + 1
         # Update max_ids_dict
         if class_name not in self.manager.max_ids_dict.keys():
             self.manager.max_ids_dict[class_name] = self.id
@@ -129,6 +127,12 @@ class Particle:
         for instance in cls.manager.state["Particle"].get(cls.__name__, {}).values():
             if instance.alive == 1:
                 yield instance
+
+    def update_state(self, new_object):
+        self.position = new_object.position
+        self.velocity = new_object.velocity
+        self.acceleration = new_object.acceleration
+        self.last_position = new_object.last_position
     
     # -------------------------------------------------------------------------
     # Dunder
@@ -324,10 +328,10 @@ class Particle:
 
     def to_dict(self):
         new_dict = {
-            "position":self.position,
-            "last_position":self.last_position,
-            "velocity":self.velocity,
-            "acceleration":self.acceleration,
+            "position":self.position.tolist(),
+            "last_position":self.last_position.tolist(),
+            "velocity":self.velocity.tolist(),
+            "acceleration":self.acceleration.tolist(),
         }
         return new_dict
     # -------------------------------------------------------------------------
@@ -494,10 +498,11 @@ class Environment:
     Class containing details about the simulation environment, walls etc
     '''
     manager = None
-    def __init__(self):
+    def __init__(self, unlinked=False):
         # Add self to manager
-        self.manager.state[self.__class__.__name__].append(self)
-    # TODO: Fill in any shared things between Wall and Target etc
+        if not unlinked:
+            self.manager.state[self.__class__.__name__].append(self)
+        # TODO: Fill in any shared things between Wall and Target etc
 
     def to_dict(self):
         new_dict = {
@@ -510,8 +515,9 @@ class Wall(Environment):
     '''
     Encodes instance of a wall
     '''
-    def __init__(self, a_position, b_position, line_colour='k', edge_colour='r') -> None:
-        super.__init__()
+    def __init__(self, a_position, b_position, line_colour='k', edge_colour='r', unlinked=False) -> None:
+        super.__init__(unlinked)
+        # TODO: Use getters and setters like in Ray
         self.a_position = a_position
         self.b_position = b_position
         self.wall_vec = b_position - a_position
@@ -570,6 +576,12 @@ class Wall(Environment):
         x_to_wall = projection - x
         return np.sqrt(np.sum(x_to_wall**2)), -x_to_wall
     
+    def update_state(self, new_object):
+        self.a_position = new_object.a_position
+        self.b_position = new_object.b_position
+        self.line_colour = new_object.line_colour
+        self.edge_colour = new_object.edge_colour
+
     # LOGGING
     def to_dict(self):
         parent_dict = super().to_dict()
@@ -583,18 +595,20 @@ class Wall(Environment):
     
     @classmethod
     def from_dict(cls, new_dict):
-        return cls(a_position=new_dict["a_position"],
+        instance = cls(a_position=new_dict["a_position"],
                    b_position=new_dict["b_position"],
                    line_colour=new_dict["line_colour"],
-                   edge_colour=new_dict["edge_colour"])
+                   edge_colour=new_dict["edge_colour"],
+                   unlinked=True)
+        return instance 
 
 
 class Target(Environment):
     '''
     Encodes instance of a target
     '''
-    def __init__(self, position, capture_radius= 0.5, colour='g') -> None:
-        super().__init__()
+    def __init__(self, position, capture_radius= 0.5, colour='g', unlinked=False) -> None:
+        super().__init__(unlinked)
         self.position = position
         self.capture_thresh = capture_radius**2
         self.colour = colour
@@ -604,6 +618,11 @@ class Target(Environment):
 
     def instance_plot(self, ax):
         ax.scatter(self.position[0],self.position[1],s=20, c=self.colour, marker='x')
+
+    def update_state(self, new_object):
+        self.position = new_object.position
+        self.capture_radius = new_object.capture_radius
+        self.colour = new_object.colour
 
     # LOGGING
     def to_dict(self):
@@ -617,6 +636,8 @@ class Target(Environment):
     
     @classmethod
     def from_dict(cls, new_dict):
-        return cls(position=new_dict["position"],
+        instance = cls(position=new_dict["position"],
                    capture_radius=new_dict["capture_radius"],
-                   colour=new_dict["colour"],)
+                   colour=new_dict["colour"],
+                   unlinked=True)
+        return instance
