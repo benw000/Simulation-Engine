@@ -1,6 +1,7 @@
 import os
 import csv
 import numpy as np
+import matplotlib.pyplot as plt
 from rich import print
 
 
@@ -33,18 +34,21 @@ class Particle:
         Set an ID value and then increment dictionaries
         '''
         # ---- ID ----
-        self.alive=1
+
+        # Initialise class name in state dict if not there
+        if self.__class__.__name__ not in self.manager.state["Particle"].keys():
+            self.manager.state["Particle"][self.__class__.__name__] = {}
 
         # Indexing for this instance
         if unlinked:
             self.id = -1
         else:
-            self._initialize_instance_id()
+            self._initialise_instance_id()
 
+        # Start alive
+        self.alive = True
 
         # ---- Motion ----
-        self.max_speed = None
-        self.just_reflected = False
 
         # If no starting position given, assign random within 2D wall limits
         if position is None:
@@ -65,27 +69,25 @@ class Particle:
         # Initialise acceleration as attribute
         self.acceleration = np.zeros(2)
 
-        
+        # Bools for hacky changes outside of force model
+        self.max_speed = None
+        self.just_reflected = False
 
-    def _initialize_instance_id(self):
-        """Initialize instance-specific attributes."""
+    def _initialise_instance_id(self):
         # Get Child class name of current instance
         class_name = self.__class__.__name__
         
-        # ID     
+        # Get unused ID
         self.id = self.manager.max_ids_dict.get(class_name, -1) + 1
+
         # Update max_ids_dict
         if class_name not in self.manager.max_ids_dict.keys():
             self.manager.max_ids_dict[class_name] = self.id
         elif self.manager.max_ids_dict[class_name] < self.id:
             self.manager.max_ids_dict[class_name] = self.id
 
-        # Initialise class name in state dict if not there
-        if class_name not in self.manager.state["Particle"].keys():
-            self.manager.state["Particle"][class_name] = {}
+        # Add to state dict
         self.manager.state["Particle"][class_name][self.id] = self
-
-        
 
     # -------------------------------------------------------------------------
     # Instance management utilities
@@ -114,7 +116,9 @@ class Particle:
         ''' 
         Sets the class instance with this id to be not alive, decrements the class count.
         '''
-        self.alive=0
+        # Update alive
+        self.alive = False
+
         # Remove from manager
         self.manager.state["Particle"][self.__class__.__name__].remove(self.id)
 
@@ -128,7 +132,8 @@ class Particle:
             if instance.alive == 1:
                 yield instance
 
-    def update_state(self, new_object):
+    def copy_state(self, new_object):
+
         self.position = new_object.position
         self.velocity = new_object.velocity
         self.acceleration = new_object.acceleration
@@ -468,10 +473,6 @@ class Particle:
             
             # Move on to next class by shifting over pipe character '|'
             idx_shift += 1
-        # Diagnostics
-        #print("-")
-        #print("done loading")
-        #print(Particle.all)
 
 
 
@@ -502,7 +503,9 @@ class Environment:
         # Add self to manager
         if not unlinked:
             self.manager.state[self.__class__.__name__].append(self)
-        # TODO: Fill in any shared things between Wall and Target etc
+
+        # Initialise artists
+        self.plt_artists = None
 
     def to_dict(self):
         new_dict = {
@@ -517,25 +520,30 @@ class Wall(Environment):
     '''
     def __init__(self, a_position, b_position, line_colour='k', edge_colour='r', unlinked=False) -> None:
         super.__init__(unlinked)
-        # TODO: Use getters and setters like in Ray
         self.a_position = a_position
         self.b_position = b_position
-        self.wall_vec = b_position - a_position
-        self.wall_length = np.sqrt(np.sum((self.wall_vec)**2))
         self.line_colour = line_colour
         self.edge_colour = edge_colour
+    
+    # Getters for simple attributes
+    @property
+    def wall_vec(self):
+        return self.b_position - self.a_position
+    
+    @property
+    def wall_length(self):
+        return np.linalg.norm(self.wall_vec)
+
+    @property
+    def perp_vec(self):
         # Get perpendicular vector with 90 degrees rotation anticlockwise
-        self.perp_vec = np.array([[0,-1],[1,0]]) @ self.wall_vec
+        rot = np.array([[0,-1],
+                        [1, 0]])
+        return np.matmul(rot, self.wall_vec)
 
     def __str__(self) -> str:
         return f"Wall_[{self.a_position}]_[{self.b_position}]."
-
-    def instance_plot(self, ax):
-        x_vals = np.array([self.a_position[0], self.b_position[0]])
-        y_vals = np.array([self.a_position[1], self.b_position[1]])
-        ax.plot(x_vals, y_vals, c=self.line_colour)
-        ax.scatter(x_vals,y_vals,s=20,c=self.edge_colour)
-
+    
     def dist_to_wall(self, particle: Particle):
         '''
         Function taking a wall and particle with position.
@@ -576,7 +584,7 @@ class Wall(Environment):
         x_to_wall = projection - x
         return np.sqrt(np.sum(x_to_wall**2)), -x_to_wall
     
-    def update_state(self, new_object):
+    def copy_state(self, new_object):
         self.a_position = new_object.a_position
         self.b_position = new_object.b_position
         self.line_colour = new_object.line_colour
@@ -601,7 +609,33 @@ class Wall(Environment):
                    edge_colour=new_dict["edge_colour"],
                    unlinked=True)
         return instance 
+    
+    # -------------------------------------------------------------------------
+    
+    # ---- MATPLOTLIB ----
+    def draw_plt(self, ax:plt.Axes, com=None, scale=None):
+        '''
+        Updates the stored self.plt_artist PathCollection with new position
+        '''
+        raise NotImplementedError
+        # TODO: Get plot position in frame
+        plot_positions = self.orient_to_com(com, scale)
+        x_vals = np.array([self.a_position[0], self.b_position[0]])
+        y_vals = np.array([self.a_position[1], self.b_position[1]])
+        ax.plot(x_vals, y_vals, c=self.line_colour)
+        ax.scatter(x_vals,y_vals,s=20,c=self.edge_colour)
 
+        if self.plt_artists is None:
+            # Initialise PathCollection artist as scatter plot point
+            self.plt_artists = []
+            self.plt_artists.append(ax.plot(x_vals, y_vals, c=self.line_colour))
+            self.plt_artists.append(ax.scatter(x_vals,y_vals,s=20,c=self.edge_colour))
+        else:
+            # Update with offset
+            self.plt_artists[0].set_data(x_vals, y_vals)
+            self.plt_artists[1].set_offsets(x_vals, y_vals)
+
+        return self.plt_artists
 
 class Target(Environment):
     '''
@@ -616,10 +650,7 @@ class Target(Environment):
     def __str__(self) -> str:
         return f"Target_[{self.position}]_[{self.capture_thresh}]]."
 
-    def instance_plot(self, ax):
-        ax.scatter(self.position[0],self.position[1],s=20, c=self.colour, marker='x')
-
-    def update_state(self, new_object):
+    def copy_state(self, new_object):
         self.position = new_object.position
         self.capture_radius = new_object.capture_radius
         self.colour = new_object.colour
@@ -641,3 +672,25 @@ class Target(Environment):
                    colour=new_dict["colour"],
                    unlinked=True)
         return instance
+    
+    # -------------------------------------------------------------------------
+    
+    # ---- MATPLOTLIB ----
+    def draw_plt(self, ax:plt.Axes, com=None, scale=None):
+        '''
+        Updates the stored self.plt_artist PathCollection with new position
+        '''
+        raise NotImplementedError
+        # TODO: Get plot position in frame
+        plot_positions = self.orient_to_com(com, scale)
+        x_position, y_position = self.orient_to_com(com, scale)
+
+        if self.plt_artists is None:
+            # Initialise PathCollection artist as scatter plot point
+            self.plt_artists = []
+            self.plt_artists.append(ax.scatter(x_position, y_position,s=20, c=self.colour, marker='x'))
+        else:
+            # Update with offset
+            self.plt_artists[0].set_offsets(x_position, y_position)
+
+        return self.plt_artists
