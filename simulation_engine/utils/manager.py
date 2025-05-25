@@ -533,17 +533,23 @@ class Manager:
 
 class Logger:
     '''
-    TODO: Docstring here
-    Also remove all the csv
-    Split up these functions into readable structure
-    '''
-    # =============================================================
+    Logger utility class to handle writing/reading NDJSON logs
+    Logs encode a Manager.state nested dictionary of Particle and Environment classes plus metadata
 
+    '''
     # ---- INITIALISATION ---- 
     def __init__(self, manager, log_path:Path, chunk_size=100):
+        """
+        Initialise a Logger instance linked to a Manager instance, with log path and chunk size.
+
+        Args:
+            manager (Manager): The current manager controlling the workflow
+            log_path (Path): Path to NDJSON log to read/write from
+            chunk_size (int, optional): Number of lines to read at a time from NDJSON log. Defaults to 100.
+        """
         self.log_path = log_path
         self.chunk_size = chunk_size
-        self.offset_indices: list[int] = []
+        self._offset_indices: list[int] = None
         self.manager = manager
 
         # Initialise log file
@@ -555,9 +561,19 @@ class Logger:
 
     # ---- READ / WRITE STATE ----
     @staticmethod
-    def write_dict_from_state(state):
-        # Read state nested dict and create JSON format state
-        # This should iterate through everything and call its return dictionary functions
+    def write_state_to_dict(state):
+        """
+        Write a state dictionary to a compressed dictionary for writing to NDJSON.
+        Iterates through all child Particle and Environment classes,
+        and calls their to_dict() method.
+        Note we may lose information depending on if the to_dict methods are lossy.
+
+        Args:
+            state (dict[dict]): Nested dictionary typically from Manager.state
+
+        Returns:
+            dict[dict]: Compressed nested dictionary to be appended to NDJSON log file
+        """
         new_dict = {}
         for key, val in state.items():
             # Create nested dict for Particle and Environment using .to_dict() methods
@@ -579,6 +595,17 @@ class Logger:
         return new_dict
     
     def load_state_from_dict(self, dict):
+        """
+        Load a state dictionary from a compressed dictionary read from an NDJSON log file.
+        Iterates through all child Particle and Environment classes,
+        and calls their from_dict() method.
+
+        Args:
+            dict (dict[dict]): Compressed nested dictionary read from NDJSON log file
+
+        Returns:
+            dict: Nested state dictionary to be used to create a Manager.state dict
+        """
         new_state = {}
         for key, val in dict.items():
             # Create nested dict for Particle and Environment using .to_dict() methods
@@ -601,26 +628,90 @@ class Logger:
                 new_state[key]=val
         return new_state
     
-    # =============================================================
-
-    # ---- APPEND ----
     def append_current_state(self, state):
-        new_dict = self.write_dict_from_state(state)
+        """
+        Append a state dictionary to the end of the current NDJSON log file.
+        Calls on Logger.write_state_to_dict(state)
+
+        Args:
+            state (dict): Nested state dictionary from Manager.state
+        """
+        new_dict = self.write_state_to_dict(state)
         with open(self.log_path, "a") as f:
             f.write(json.dumps(new_dict)+"\n")
 
     # =============================================================
 
+    # ---- ACCESS PARTICULAR TIMESTEP ----
+    @property
+    def offset_indices(self):
+        """
+        Getter to generate a list of byte offsets for NDJSON file:
+        - Reads self.log_path and records each offset when a new line (ie new state dict) is reached.
+        - Stores list of these byte offset indices to self.offset_indices
+        """
+        if self._offset_indices is None:
+            offset_indices = []
+            with open(self.log_path, "r") as f:
+                # While not done keep writing offsets
+                while True:
+                    # Get cursor position with tell
+                    offset = f.tell()
+                    # Read a line, break if nothing there
+                    line = f.readline()
+                    if not line:
+                        break
+                    # Add offset to list
+                    offset_indices.append(offset)
+            self._offset_indices = offset_indices
+        return self._offset_indices
+
+    def get_state_at_timestep(self, timestep:int):
+        """
+        Read the NDJSON log for the state at given timestep,
+        return nested state dictionary for setting Manager.state
+
+        Args:
+            timestep (int): Timestep of the simulation to load
+
+        Returns:
+            dict[dict]: Nested state dictionary from Manager.state
+        """
+        with open(self.log_path, "r") as f:
+            # Go to cursor offset of desired line
+            f.seek(self.offset_indices[timestep])
+            # Read the line into a JSON string
+            line_str = f.readline()
+        # Read the JSON string into a compressed state dict
+        line_dict = json.loads(line_str)
+        # Load a state dictionary from this compressed state dict
+        state = self.load_state_from_dict(line_dict)
+        return state
+    
+    # =============================================================
+
     # ---- YIELD BY CHUNKING ----
     def iter_all_states(self):
-        # Loops through chunks, reads through lines and yields states
+        """
+        Generator to read all states from an NDJSON in chunks.
+        Loops through chunks of size self.chunk_size,
+        reads each chunk's JSON lines and yields states
+
+        Yields:
+            state: Nested state dictionary to be used to set Manager.state
+        """
         for chunk in self._read_by_chunk():
             for line in chunk:
                 yield self.load_state_from_dict(line)
 
     def _read_by_chunk(self):
-        # Reads through final and yields chunks
-        # Read chunk_size many lines if possible from file
+        """
+        Generator to loop through chunks of lines in an NDJSON file.
+        Yields up to self.chunk_size many JSON lines from the file.
+
+        Yields:
+            list[dict]: Chunk list of nested state dictionaries
+        """
         with open(self.log_path, "r") as f:
             # Start with empty chunk list
             chunk = []
@@ -636,37 +727,6 @@ class Logger:
             if chunk:
                 yield chunk
 
-    # =============================================================
-
-    # ---- ACCESS PARTICULAR TIMESTEP ----
-    def _build_offset_indices(self):
-        # Read the log path and go through, note down byte offsets
-        offset_indices = []
-        with open(self.log_path, "r") as f:
-            # While not done keep writing offsets
-            while True:
-                # Get cursor position with tell
-                offset = f.tell()
-                # Read a line, break if nothing there
-                line = f.readline()
-                if not line:
-                    break
-                # Add offset to list
-                offset_indices.append(offset)
-        self.offset_indices = offset_indices
-
-    def get_state_at_timestep(self, timestep:int):
-        # Get offset indices
-        if self.offset_indices == []:
-            self._build_offset_indices()
-        # Read file at specific location
-        with open(self.log_path, "r") as f:
-            # Go to cursor offset of desired line
-            f.seek(self.offset_indices[timestep])
-            # Read the line into state
-            line_str = f.readline()
-        return self.load_state_from_dict(json.loads(line_str))
-    
 
 '''
 TODO:
@@ -685,14 +745,6 @@ When really we want the same artists to be throughout
 So we need a self.state update function!
 This takes an object from history and makes the relevant changes
     
-
-
-'''
-
-
-
-
-'''
 TODO: 
 Look through git changes
 It doesnt work, and it used to. Get this back.
