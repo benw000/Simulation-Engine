@@ -1,41 +1,38 @@
-import numpy as np
 import json
+from rich import print
+from rich.table import Table
+from rich.console import Console
+from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn, TaskProgressColumn
+from copy import deepcopy
+import argparse
 from pathlib import Path
-import datetime
-from simulation_engine.classes.parents import Particle, Environment, Wall, Target
+from datetime import datetime
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.gridspec import GridSpec
+
+from simulation_engine.classes.parents import Particle, Environment, Wall, Target
+from simulation_engine.utils.errors import SimulationEngineInputError
+
 
 class Manager:
     '''
     Manages the collection of particle and environment entities
     '''
-    # =============================================================
-
     # ---- INITIALISATION ---- 
-
-    # TODO: Clear up inputs
     def __init__(self,
-                 delta_t:float = 0.01,
-                 num_timesteps:int = 100,
-                 store_history:bool=True,
-                 save_json:bool = True,
-                 json_path:Path = None,
-                 save_mp4:bool = True,
-                 mp4_path:Path = None,
-                 compute_and_animate:bool = True,
+                 args:argparse.Namespace,
                  show_graph:bool = False,
-                 torus:bool = False,
-                 track_com:bool = False):
+                 draw_backdrop_plt_func = None,
+                 ):
         """
         Initialise a Manager object to oversee the timestepping and state storing
-        Function called by a simulation mode's setup function
+        This will be called by a simulation type's setup() function,
+        but is only completed after initialisation at the end of the setup() function.
+        (After this, the main entrypoint script will call the Manager.run() method.)
         """
-        # TODO: Validate inputs
-        if torus and track_com:
-            raise NotImplementedError("Please pick one of torus or track_com")
-
+        # ---- Initialise stores ----
         # Initialise state dictionary
         self.state = {"Particle":{},
                       "Environment":{}}
@@ -46,74 +43,259 @@ class Manager:
         # Initialise child class registry (e.g. "Prey":Prey)
         self.class_objects_registry = {}
 
+        # History of state dicts
+        self.history = []
+
+        # Make other classes point to this specific self instance
+        Environment.manager = self
+        Particle.manager = self
+
+        self.done_computing = False
+        self.just_looped = False
+
+        # ---- Unpack entrypoint args ----
+        # Mode arguments
+        self.mode = args.mode
+        self.simulation_type = args.type
+        self.interactive = args.interactive
+        # TODO: Decide on render framework to use from these
+        self.render_framework = "matplotlib"
+
         # Time
-        self.delta_t = delta_t
-        self.num_timesteps = num_timesteps
+        self.num_steps: int = args.steps
+        self.delta_t: float = args.deltat
         self.current_time = 0
         self.current_step = 0
 
-        # Graph
+        # Cache, log, sync bool flags
+        self.write_log = args.log
+        self.cache_history = args.cache
+        self.sync_compute_and_rendering = args.sync
+        self.save_video = args.vid
+
+        # Construct log path from potentially incomplete input
+        now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        default_log_name = Path(f"{args.type}_simulation_log_{now}.ndjson")
+        default_log_folder = Path("./data/Simulation_Logs")
+        default_log_path = default_log_folder / default_log_name
+        if args.log_path:
+            log_path = Path(args.log_path)
+        elif args.log_name and args.log_folder:
+            log_path = Path(args.log_folder) / Path(args.log_name)
+        elif args.log_name:
+            log_path = default_log_folder / Path(args.log_name)
+        elif args.log_folder:
+            log_path = Path(args.log_folder) / default_log_name
+        else:
+            log_path = default_log_path
+        # Such nice logic 🥹
+        # Initialise Logger
+        self.logger = Logger(manager=self, log_path=log_path, chunk_size=args.log_read_chunk_size)
+
+        # Construct vid path from potentially incomplete input
+        default_vid_name = Path(f"{args.type}_simulation_video_{now}.mp4")
+        default_vid_folder = Path("./data/Simulation_Videos")
+        default_vid_path = default_vid_folder / default_vid_name
+        if args.vid_path:
+            vid_path = Path(args.vid_path)
+        elif args.vid_name and args.vid_folder:
+            vid_path = Path(args.vid_folder) / Path(args.vid_name)
+        elif args.vid_name:
+            vid_path = default_vid_folder / Path(args.vid_name)
+        elif args.vid_folder:
+            vid_path = Path(args.vid_folder) / default_vid_name
+        else:
+            vid_path = default_vid_path
+        self.vid_path = vid_path
+
+        # ---- Unpack other arguments ----
         self.show_graph = show_graph
+        if draw_backdrop_plt_func:
+            self.draw_backdrop_plt_func = draw_backdrop_plt_func
 
-        # Log settings
-        self.compute_and_animate = compute_and_animate
-        self.store_history = store_history
-        self.history = []
 
-        # NDJSON log
-        self.save_json = save_json
-        self.ndjson_path = json_path
-        if self.ndjson_path is None and self.save_json:
-            self.ndjson_path = Path(f"simulation_log_{str(datetime.datetime.now())}.ndjson")
-            self.logger = Logger(self,self.ndjson_path)
-
-        self._state_iterator = None
-        if not self.compute_and_animate:
-            if self.store_history:
-                self._state_iterator = self.history
-            else:
-                self._state_iterator = self.logger.iter_all_states()
-
-        # MP4 Video
-        self.save_mp4 = save_mp4
-        self.mp4_path = mp4_path
-        if self.mp4_path is None and self.save_mp4:
-            self.mp4_path = Path(f"simulation_vid_{str(datetime.datetime.now())}.mp4")
-        
     # =============================================================
 
-    # ---- DUNDER ---- 
+    # ---- UTILITIES ---- 
     def iterate_all_particles(self):
         for class_name, class_dict in self.state["Particle"].items():
             for id, particle in class_dict.items():
                 if particle.alive:
                     yield particle
-    
+
+    def rich_progress(self, iterable, description: str = "Working"):
+        """
+        Wraps an iterable with a Rich progress bar that displays [iteration / total].
+
+        Parameters:
+            iterable (Iterable): The iterable object that we're looping over.
+            description (str): Description label used by progress bar.
+
+        Yields:
+            Iterable elements plus progress bar.
+        """
+        # Get total length
+        total = len(iterable) if hasattr(iterable, "__len__") else None
+        
+        # Make columns
+        with Progress(
+            TextColumn("[progress.description]{task.description}"),
+            TextColumn("[{task.completed}/{task.total}]"),  # Shows [n/total]
+            BarColumn(),
+            TaskProgressColumn(),  # Shows % complete
+            TimeRemainingColumn(),
+        ) as progress:
+            task = progress.add_task(description, total=total)
+            for item in iterable:
+                yield item
+                progress.update(task, advance=1)
+        
+        
     # =============================================================
 
-    # ---- UPDATE ---- 
+    # ---- MAIN OPERATIONS ----
+    def start(self):
+        """
+        Called by main entrypoint script, divides up between modes.
+        Each mode has its own pipeline function.
+        """
+        # Display settings
+        console = Console()
+        long_line_divide = "[dim]" + "─" * 40 + "[/dim]"
+        short_line_divide = "[dim]" + "─" * 20 + "[/dim]"
+        table = Table(title="[bold]Selected Settings ⚙️[/bold]")
+        table.add_column("Setting", justify="centre",style="bold magenta")
+        table.add_column("Command Flag", justify="left",style="yellow")
+        table.add_column("Value", justify="left", style="green")
+
+        table.add_row("⚙️  Mode", "(argument 1)",f"{self.mode}")
+        table.add_row("🦋 Simulation Type", "(argument 2)", f"{self.simulation_type}")
+        table.add_row("🕹️  Interactive", "-i, --interactive", f"{self.interactive}")
+        table.add_row(long_line_divide, short_line_divide, long_line_divide)
+
+        table.add_row("💯 Total number of timesteps","-t, --steps" f"{self.num_steps}")
+        table.add_row("⏳ Timestep duration (delta t)","-d, --deltat", f"{self.delta_t}")
+        table.add_row(long_line_divide, short_line_divide, long_line_divide)
+
+        table.add_row("🧮 Synchronous compute and render","-s, --sync", f"{self.sync_compute_and_rendering}")
+        table.add_row("🧠 Cache history of timesteps","-c, --cache", f"{self.cache_history}")
+        table.add_row("📝 Write to NDJSON log","-l, --log", f"{self.cache_history}")
+        table.add_row("🎥 Save render to MP4 video","-v, --vid", f"{self.save_video}")
+        table.add_row("🗄️  NDJSON log path", "--log_path\n OR --log_name\n OR --log_folder",f"{self.logger.log_path}")
+        table.add_row("🎞️  MP4 video path", "--vid_path\n OR --vid_name\n OR --vid_folder", f"{self.vid_path}")
+
+        print("")
+        console.print(table)
+        del console
+
+        if self.mode == 'run':
+            self.run()
+        elif self.mode == 'load':
+            self.load()
+    
+    def run(self):
+        # Compute first if asynchronous
+        if not self.sync_compute_and_rendering:
+            for timestep in self.rich_progress(range(self.num_steps), description=f"[bold]Computation Progress[/bold]"):
+                # print(f"----- Computation Progress: {self.current_step} / {self.num_steps} -----" ,end="\r", flush=True)
+                self.update()
+            print("")
+            print("[cyan]Finished Computing![/cyan] 🥸")
+            print("")
+            # Reset to first step's state
+            # self.state = self._read_state_at_timestep(0)
+            self.current_time = 0
+            self.current_step = 0 # -1
+        
+
+
+        # Split by rendering framework
+        if self.render_framework == "matplotlib":
+            self.animate_plt()
+
+    def load(self):
+        raise NotImplementedError
+    
     def update(self):
         """
         To be called at each simulation timestep
         """
-        # Update state
-        for particle in self:
+        # Update all particles
+        for particle in self.iterate_all_particles():
             particle.update()
 
         # Increment time
         self.current_time += self.delta_t
         self.current_step += 1
 
-        # TODO: Update kill records
+        # TODO: Update kill records?
 
-        # Store in history
-        if self.store_history:
-            self.history.append(self.state)
+        # Store state in history
+        if self.cache_history:
+            self.history.append(deepcopy(self.state))
 
         # Write to file
-        if self.save_json:
+        if self.write_log and not self.done_computing:
             self.logger.append_current_state(self.state)
+
+    def load_state_at_timestep(self, timestep):
+        # Reset after loop
+        if self.just_looped:
+            if not self.done_computing:
+                self.done_computing = True
+                print("")
+                print("[green]Finished Rendering![/green] 🐸")
+                print("")
+                print("Now displaying finished rendered frames in real time!")
+                print("Press 'Q' in the plot window to exit.")
+                print("")
+            self.current_time = 0
+            self.current_step = -1
+            self.just_looped = False
+        # Check for loop
+        if timestep == self.num_steps-1:
+            self.just_looped = True
+
+        # Either compute or read state
+        if self.sync_compute_and_rendering and \
+            (not self.done_computing or \
+            (not self.cache_history and not self.write_log)):
+            # Synchronous - we compute while rendering
+            self.update()                
+        else:
+            # Asynchronous - we've already computed steps
+            self.update_state(self._read_state_at_timestep(timestep))
+            self.current_step += 1
+            self.current_time += self.delta_t
     
+    def _read_state_at_timestep(self, timestep):
+        # Try cached history, then from log file
+        if self.cache_history:
+            return self.history[timestep]
+        elif self.write_log:
+            return self.logger.get_state_at_timestep(timestep)
+        else:
+            raise Exception("Neither cache or log written but trying to read! in _read_state_at_timestep!")
+
+    def update_state(self, new_state):
+        # TODO: write comment about why this is needed, deepcopy issue
+        for key, val in self.state.items():
+            if key in ["Particle", "Environment"]:
+                if key == "Particle":
+                    for child_class_name, child_class_dict in val.items():
+                        for id, child in child_class_dict.items():
+                            new_object = new_state[key][child_class_name][id]
+                            child.update_state(new_object)
+                elif key == "Environment":
+                    for child_class_name, child_class_list in val.items():
+                        for idx, child in enumerate(child_class_list):
+                            new_object = new_state[key][child_class_name][idx]
+                            child.update_state(new_object)
+            # Assuming all other keys are simple, not objects
+            else:
+                self.state[key] = new_state[key]
+
+
     # =============================================================
     
     # ---- MATPLOTLIB PLOTTING ----
@@ -123,21 +305,32 @@ class Manager:
         # Set up figure
         fig, ax, ax2 = self.setup_figure_plt()
 
+        print("Now rendering frames for each time step - [italic]not displaying real time[/italic]")
+        print("")
+
         # Setup a matplotlib FuncAnimation of draw_figure_plt
         # (draw_figure_plt handles updating/loading state)
         interval_between_frames = self.delta_t*1000 # milliseconds
-        ani = FuncAnimation(fig, self.draw_figure_plt,
-                            frames=self.num_timesteps,
+        frames_iterator = self.rich_progress(range(self.num_steps),description="[bold]Rendering Progress[/bold]")
+        animation = FuncAnimation(fig=fig, 
+                            func=self.draw_figure_plt,
+                            frames=frames_iterator,
                             fargs=([ax],[ax2]), 
-                            interval=interval_between_frames)
-        plt.show()
-
+                            interval=interval_between_frames,
+                            repeat=True,
+                            cache_frame_data=self.cache_history)
+        
         # Optionally save video
-        if self.save_mp4:
+        if self.save_video:
+            # Make sure parent path exists
+            self.vid_path.parent.mkdir(parents=True, exist_ok=True)
             fps = 1/self.delta_t # period -> frequency
-            ani.save(self.mp4_path, writer='ffmpeg', fps=fps)
+            animation.save(self.vid_path.absolute().as_posix(), writer='ffmpeg', fps=fps)
             print("\n")
-            print(f"Saved simulation as mp4 at {self.mp4_path}.")
+            print(f"Saved simulation as mp4 at {self.vid_path}.")
+        
+        # Play video on loop
+        plt.show()
 
     # ---- SETUP FIGURE ----
     def setup_figure_plt(self):
@@ -169,14 +362,19 @@ class Manager:
         else:
             # Setup figure
             fig, ax = plt.subplots()#figsize=[20,15])
-            fig.set_size_inches(20,20)
+            height = 7 #in inches
+            width = height * Particle.env_x_lim / Particle.env_y_lim
+            fig.set_size_inches(width, height)
 
         # Initialise ax by plotting dimensions
         ax.set(xlim=[0,Particle.env_x_lim], ylim=[0,Particle.env_x_lim])
         
         # Add title
-        window_title = "Simulation" # TODO: change this
-        fig.canvas.set_window_title(window_title)
+        if self.done_computing:
+            window_title = f"Simulation Engine [{self.simulation_type}] | Step: {self.current_step}/{self.num_steps} | Time: {round(self.current_time,2)}s"
+        else:
+            window_title = f"RENDERING - Please do not quit! | Step: {self.current_step}/{self.num_steps}"
+        fig.canvas.manager.set_window_title(window_title)
 
         # Set layout for ax
         ax.clear()
@@ -214,29 +412,35 @@ class Manager:
     
     # ---- DRAW FIGURE ----
     def draw_figure_plt(self, timestep, ax, ax2=None):
-        # Update or load state
-        if self.compute_and_animate:
-            self.update()
-        else:
-            self.state = next(self._state_iterator)
+        # Get the right state
+        self.load_state_at_timestep(timestep)
 
-        # Unpack ax, ax2 from FuncAnimation's wrapper
+        # Print current frame - this will usually be silenced by rich progress bar until rendering done
+        print(f"--> [italic]Displaying Frame[/italic][{self.current_step} / {self.num_steps}]" ,end="\r", flush=True)
+
+        # Unpack ax, ax2 from wrapper
         ax = ax[0]
         ax2 = ax2[0]
-
-        # Print calculation progress
-        print(f"----- Animation progress: {timestep} / {self.num_timesteps} -----" ,end="\r", flush=True)
 
         # Draw frame and graph onto existing axes
         self.draw_frame_plt(ax)
         if self.show_graph:
             self.draw_graph_plt(ax2)
-    
+
     # ---- DRAW FRAME ----
     def draw_frame_plt(self, ax):
         '''
         Draw all objects in the simulation's current state onto a supplied matplotlib ax object.
-        '''        
+        '''
+        
+        # Add title
+        if self.done_computing:
+            window_title = f"Simulation Engine [{self.simulation_type}] | Step: {self.current_step}/{self.num_steps} | Time: {round(self.current_time,2)}s"
+        else:
+            window_title = f"RENDERING - Please do not quit! | Step: {self.current_step}/{self.num_steps}"
+        fig = ax.get_figure()
+        fig.canvas.manager.set_window_title(window_title)
+
         # Decide if tracking the COM in each frame
         com, scene_scale = None, None
         if Particle.track_com:
@@ -305,15 +509,16 @@ class Logger:
     # =============================================================
 
     # ---- INITIALISATION ---- 
-    def __init__(self, manager, log_path:Path, chunk_size=100, ):
-        # Check path
-        if log_path.suffix != '.ndjson':
-            raise NameError(f"Expected log path with extension .ndjson, got {log_path}")
+    def __init__(self, manager, log_path:Path, chunk_size=100):
         self.log_path = log_path
-
         self.chunk_size = chunk_size
         self.offset_indices: list[int] = []
         self.manager = manager
+
+        # Initialise log file
+        if self.manager.write_log:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            self.log_path.touch()
     
     # =============================================================
 
@@ -350,16 +555,16 @@ class Logger:
                 new_state[key] = {}
                 if key == "Particle":
                     for child_class_name, child_class_dict in val.items():
-                        child_class = self.class_objects_registry[child_class_name]
+                        child_class = self.manager.class_objects_registry[child_class_name]
                         new_state[key][child_class_name] = {}
-                        for id, child in child_class_dict.items():
-                            new_state[key][child_class_name][id] = child_class.from_dict(child)
+                        for id, child_dict in child_class_dict.items():
+                            new_state[key][child_class_name][int(id)] = child_class.from_dict(child_dict)
                 elif key == "Environment":
                     for child_class_name, child_class_list in val.items():
-                        child_class = self.class_objects_registry[child_class_name]
+                        child_class = self.manager.class_objects_registry[child_class_name]
                         new_state[key][child_class_name] = []
-                        for child in child_class_list:
-                            new_state[key][child_class_name].append(child_class.from_dict(child))
+                        for child_dict in child_class_list:
+                            new_state[key][child_class_name].append(child_class.from_dict(child_dict))
             # Assuming all other keys are simple
             else:
                 new_state[key]=val
@@ -369,13 +574,19 @@ class Logger:
 
     # ---- APPEND ----
     def append_current_state(self, state):
-        new_dict = self.create_dict_from_state(state)
+        new_dict = self.write_dict_from_state(state)
         with open(self.log_path, "a") as f:
             f.write(json.dumps(new_dict)+"\n")
 
     # =============================================================
 
     # ---- YIELD BY CHUNKING ----
+    def iter_all_states(self):
+        # Loops through chunks, reads through lines and yields states
+        for chunk in self._read_by_chunk():
+            for line in chunk:
+                yield self.load_state_from_dict(line)
+
     def _read_by_chunk(self):
         # Reads through final and yields chunks
         # Read chunk_size many lines if possible from file
@@ -394,12 +605,6 @@ class Logger:
             if chunk:
                 yield chunk
 
-    def iter_all_states(self):
-        # Loops through chunks, reads through lines and yields states
-        for chunk in self._read_by_chunk():
-            for line in chunk:
-                yield self.load_state_from_dict(line)
-    
     # =============================================================
 
     # ---- ACCESS PARTICULAR TIMESTEP ----
@@ -429,5 +634,42 @@ class Logger:
             f.seek(self.offset_indices[timestep])
             # Read the line into state
             line_str = f.readline()
-            return self.load_state_from_dict(json.reads(line_str))
+        return self.load_state_from_dict(json.loads(line_str))
     
+
+'''
+TODO:
+Subtle issue
+When we append to history, we append self.state
+But then we get a history full of the same exact self.state object, and each
+part of the self.history list updates with each timestep
+
+Instead we want to use deepcopy(self.state).
+But then the artists inside each have not been initialised
+So they must be initialised - this is solved
+But then because each history state is a different object, each artist is different
+So we track more and more artists
+When really we want the same artists to be throughout
+
+So we need a self.state update function!
+This takes an object from history and makes the relevant changes
+    
+
+
+'''
+
+
+
+
+'''
+TODO: 
+Look through git changes
+It doesnt work, and it used to. Get this back.
+
+Then fix the whole of the FuncAnimation and iter stuff.
+Want a window to pop up, want the video to work, getting silly
+
+Need it to stop calculating at a certain point, and just behave like normal.
+So frustrating
+
+'''
