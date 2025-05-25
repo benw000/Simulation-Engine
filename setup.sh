@@ -13,24 +13,42 @@ SCRIPT_PARENT_PATH="$(cd "$(dirname "$0")"; pwd)"
 SCRIPT_PATH="$SCRIPT_PARENT_PATH/$SCRIPT_NAME"
 echo "$SCRIPT_PATH"
 # Get shell config path based for zsh or bash
-if [ -n "$ZSH_VERSION" ]; then
-    SHELL_CONFIG="$HOME/.zshrc"
-elif [ -n "$BASH_VERSION" ]; then
-    SHELL_CONFIG="$HOME/.bashrc"
-else
-    echo "Unsupported shell. Add the alias manually:"
-    echo "alias $ALIAS_NAME='python \"$SCRIPT_PATH\"'"
-    exit 1
-fi
+case "$SHELL" in
+  */zsh)  SHELL_CONFIG="$HOME/.zshrc" ;;
+  */bash) SHELL_CONFIG="$HOME/.bashrc" ;;
+  *) echo "Unsupported shell. Add the alias manually:";
+    echo "alias $ALIAS_NAME='python \"$SCRIPT_PATH\"'"; exit 1 ;;
+esac
 
 # Check if alias already exists in shell config, if not then set
 ALIAS_COMMAND="alias $ALIAS_NAME='python \"$SCRIPT_PATH\"'"
 if grep -Fxq "$ALIAS_COMMAND" "$SHELL_CONFIG"; then
     echo "Alias already exists in $SHELL_CONFIG"
 else
-    echo "$ALIAS_COMMAND" >> "$SHELL_CONFIG"
-    echo "Alias added to $SHELL_CONFIG"
+    if [ -w "$SHELL_CONFIG" ]; then
+        echo "$ALIAS_COMMAND" >> "$SHELL_CONFIG"
+        echo "Alias added to $SHELL_CONFIG"
+    else
+        echo "Error: Cannot write to $SHELL_CONFIG — permission denied."
+        echo "Printing permissions on $SHELL_CONFIG file:"
+        ls -l "$SHELL_CONFIG"
+        echo "If $SHELL_CONFIG is owned by 'root' then change permissions via:"
+        echo "sudo chown $(whoami):staff $SHELL_CONFIG"
+        echo "(After this please rerun ./setup.sh)"
+        echo "Or please add this line manually:"
+        echo "$ALIAS_COMMAND"
+        exit 1
+    fi
 fi
+
+# Remove alias - commented out
+# sed -i.bak "/$ALIAS_COMMAND" "$SHELL_CONFIG"
+# Remove from current session
+# unalias "$ALIAS_NAME" 2>/dev/null
+
+# Make sure profiles are in sync
+echo '[ -f ~/.zshrc ] && source ~/.zshrc' >> ~/.zprofile
+echo '[ -f ~/.bashrc ] && source ~/.bashrc' >> ~/.bash_profile
 
 # Reload
 echo "Reloading shell config..."
@@ -41,7 +59,3 @@ echo "You can now run '$ALIAS_NAME' from anywhere in your terminal."
 echo "Please run the following to activate it in your current session:"
 echo "    source $SHELL_CONFIG"
 
-# Remove alias - commented out
-# sed -i.bak "/alias $ALIAS_NAME=.*myscript.py.*/d" "$SHELL_CONFIG"
-# Remove from current session
-# unalias "$ALIAS_NAME" 2>/dev/null
