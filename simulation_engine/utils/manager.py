@@ -1,16 +1,18 @@
 import json
-from rich import print
-from rich.table import Table
-from rich.console import Console
-from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn, TaskProgressColumn
-from copy import deepcopy
 import argparse
 from pathlib import Path
+from copy import deepcopy
 from datetime import datetime
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.gridspec import GridSpec
+
+from rich import print
+from rich.table import Table
+from rich.console import Console
+from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn, TaskProgressColumn
 
 from simulation_engine.classes.parents import Particle, Environment, Wall, Target
 from simulation_engine.utils.errors import SimulationEngineInputError
@@ -18,7 +20,9 @@ from simulation_engine.utils.errors import SimulationEngineInputError
 
 class Manager:
     '''
-    Manages the collection of particle and environment entities
+    Manager class to oversee the main simulation engine pipeline.
+    Holds a state dictionary of all Particle and Environment child classes,
+    as well as all engine settings.
     '''
     # ---- INITIALISATION ---- 
     def __init__(self,
@@ -30,7 +34,7 @@ class Manager:
         Initialise a Manager object to oversee the timestepping and state storing
         This will be called by a simulation type's setup() function,
         but is only completed after initialisation at the end of the setup() function.
-        (After this, the main entrypoint script will call the Manager.run() method.)
+        (After this, the main entrypoint script will call the Manager.start() method.)
         """
         # ---- Initialise stores ----
         # Initialise state dictionary
@@ -118,6 +122,12 @@ class Manager:
 
     # ---- UTILITIES ---- 
     def iterate_all_particles(self):
+        """
+        Generator to yield all particles.
+
+        Yields:
+            Particle: Different instances of child classes of Particle
+        """
         for class_name, class_dict in self.state["Particle"].items():
             for id, particle in class_dict.items():
                 if particle.alive:
@@ -125,7 +135,7 @@ class Manager:
 
     def rich_progress(self, iterable, description: str = "Working"):
         """
-        Wraps an iterable with a Rich progress bar that displays [iteration / total].
+        Wraps an iterable with a Rich module progress bar that displays [iteration / total].
 
         Parameters:
             iterable (Iterable): The iterable object that we're looping over.
@@ -149,17 +159,8 @@ class Manager:
             for item in iterable:
                 yield item
                 progress.update(task, advance=1)
-        
-        
-    # =============================================================
-
-    # ---- MAIN OPERATIONS ----
-    def start(self):
-        """
-        Called by main entrypoint script, divides up between modes.
-        Each mode has its own pipeline function.
-        """
-        # Display settings
+    
+    def print_settings_table(self):
         console = Console()
         long_line_divide = "[dim]" + "─" * 40 + "[/dim]"
         short_line_divide = "[dim]" + "─" * 20 + "[/dim]"
@@ -186,15 +187,84 @@ class Manager:
 
         print("")
         console.print(table)
-        del console
+        print("")
 
+    # ---- STATE LOADING UTILITIES----
+    def get_state_at_timestep(self, timestep: int):
+        """
+        Get a state dictionary from a given timestep.
+        Behaviour depends on user supplied 'log' and 'cache' arguments:
+        1. If available, loads from cached self.history list of state dicts.
+        2. Else, loads from NDJSON file.
+
+        Args:
+            timestep (int): Timestep number
+
+        Raises:
+            Exception: If neither cache or log were written. (Shouldn't happen)
+
+        Returns:
+            dict: Nested state dictionary to use for setting Manager.state
+        """
+        if self.cache_history:
+            return self.history[timestep]
+        elif self.write_log:
+            return self.logger.read_log_at_timestep(timestep)
+        else:
+            raise Exception("Neither cache or log written but trying to read! in get_state_at_timestep!")
+
+    def copy_state(self, new_state):
+        """
+        Recursively copies a new_state dictionary into Manager.state.
+        Nested copying of each child instance in dict ensures continuity.
+
+        Args:
+            new_state (dict): Nested state dictionary
+        """
+        for key, val in self.state.items():
+            if key in ["Particle", "Environment"]:
+                if key == "Particle":
+                    for child_class_name, child_class_dict in val.items():
+                        for id, child in child_class_dict.items():
+                            new_object = new_state[key][child_class_name][id]
+                            child.copy_state(new_object)
+                elif key == "Environment":
+                    for child_class_name, child_class_list in val.items():
+                        for idx, child in enumerate(child_class_list):
+                            new_object = new_state[key][child_class_name][idx]
+                            child.copy_state(new_object)
+            # Assuming all other keys are simple, not objects
+            else:
+                self.state[key] = new_state[key]
+
+    # =============================================================
+
+    # ---- MAIN PIPELINE OPERATIONS ----
+    def start(self):
+        """
+        Called by simulation engine package's main entrypoint script.
+        - Starts pipeline function for specified mode (ie run vs load).
+        """
         if self.mode == 'run':
             self.run()
         elif self.mode == 'load':
             self.load()
     
     def run(self):
-        # Compute first if asynchronous
+        """
+        Main pipeline function for 'run' mode.
+
+        0. Optionally records starting state
+        1. If in asynchronous mode (default) computes all timesteps.
+        2. Renders simulation timesteps with chosen rendering framework (eg matplotlib)
+        """
+        # 0. Record starting state
+        if self.cache_history:
+            self.history.append(deepcopy(self.state))
+        if self.write_log:
+            self.logger.append_current_state(self.state)
+
+        # 1. Compute first if asynchronous
         if not self.sync_compute_and_rendering:
             for timestep in self.rich_progress(range(self.num_steps), description=f"[bold]Computation Progress[/bold]"):
                 # print(f"----- Computation Progress: {self.current_step} / {self.num_steps} -----" ,end="\r", flush=True)
@@ -203,13 +273,10 @@ class Manager:
             print("[cyan]Finished Computing![/cyan] 🥸")
             print("")
             # Reset to first step's state
-            # self.state = self._read_state_at_timestep(0)
             self.current_time = 0
             self.current_step = 0 # -1
         
-
-
-        # Split by rendering framework
+        # 2. Split by rendering framework
         if self.render_framework == "matplotlib":
             self.animate_plt()
 
@@ -218,7 +285,12 @@ class Manager:
     
     def update(self):
         """
-        To be called at each simulation timestep
+        Main timestepping function for simulation engine.
+
+        - Updates all particles in current Manager.state dictionary
+        - Increments time and updates records
+        - Optionally caches state dict by appending to self.history
+        - Optionally writes state dict to NDJSON log
         """
         # Update all particles
         for particle in self.iterate_all_particles():
@@ -238,85 +310,34 @@ class Manager:
         if self.write_log and not self.done_computing:
             self.logger.append_current_state(self.state)
 
-    def load_state_at_timestep(self, timestep):
-        # Reset after loop
-        if self.just_looped:
-            if not self.done_computing:
-                self.done_computing = True
-                print("")
-                print("[green]Finished Rendering![/green] 🐸")
-                print("")
-                print("Now displaying finished rendered frames in real time!")
-                print("Press 'Q' in the plot window to exit.")
-                print("")
-            self.current_time = 0
-            self.current_step = -1
-            self.just_looped = False
-        # Check for loop
-        if timestep == self.num_steps-1:
-            self.just_looped = True
-
-        # Either compute or read state
-        if self.sync_compute_and_rendering and \
-            (not self.done_computing or \
-            (not self.cache_history and not self.write_log)):
-            # Synchronous - we compute while rendering
-            self.update()                
-        else:
-            # Asynchronous - we've already computed steps
-            self.copy_state(self._read_state_at_timestep(timestep))
-            self.current_step += 1
-            self.current_time += self.delta_t
-    
-    def _read_state_at_timestep(self, timestep):
-        # Try cached history, then from log file
-        if self.cache_history:
-            return self.history[timestep]
-        elif self.write_log:
-            return self.logger.get_state_at_timestep(timestep)
-        else:
-            raise Exception("Neither cache or log written but trying to read! in _read_state_at_timestep!")
-
-    def copy_state(self, new_state):
-        for key, val in self.state.items():
-            if key in ["Particle", "Environment"]:
-                if key == "Particle":
-                    for child_class_name, child_class_dict in val.items():
-                        for id, child in child_class_dict.items():
-                            new_object = new_state[key][child_class_name][id]
-                            child.copy_state(new_object)
-                elif key == "Environment":
-                    for child_class_name, child_class_list in val.items():
-                        for idx, child in enumerate(child_class_list):
-                            new_object = new_state[key][child_class_name][idx]
-                            child.copy_state(new_object)
-            # Assuming all other keys are simple, not objects
-            else:
-                self.state[key] = new_state[key]
-
-
     # =============================================================
     
-    # ---- MATPLOTLIB PLOTTING ----
+    # MATPLOTLIB PLOTTING
 
-    # ---- ANIMATION ----
+    # ---- MAIN ANIMATION PIPELINE ----
     def animate_plt(self):
-        # Set up figure
+        """
+        Main animation pipeline function for rendering simulation via matplotlib.
+
+        Does the following:
+        1. Sets up figure and axes objects
+        2. Creates a matplotlib FuncAnimation object to perform animation in window,
+           which calls our draw_figure_plt function at each timestep
+        3. Optionally saves video of the animation
+        4. Renders video then plays on loop once cached.
+        """
+        # 1. Set up figure and axes
         fig, ax, ax2 = self.setup_figure_plt()
 
-        print("Now rendering frames for each time step - [italic]not displaying real time[/italic]")
-        print("")
-
-        # Setup a matplotlib FuncAnimation of draw_figure_plt
-        # (draw_figure_plt handles updating/loading state)
+        # 2. Create a matplotlib FuncAnimation object which timesteps draw_figure_plt
         interval_between_frames = self.delta_t*1000 # milliseconds
         # Wrap the frames iterator in a custom rich progress bar
         frames_iterator = self.rich_progress(range(self.num_steps),description="[bold]Rendering Progress[/bold]")
-        # Use returned artists collected by draw_figure_plt to selectively update based on changes
-        # Tried implementing but getting bugs, move on
+        # Tried blit=True with returned artists collected recursively by draw_figure_plt, couldn't get working.
         blit = False
         # Create a zero-argument init_func inside a scope that can see our desired arguments
-        init_func_plt = self.make_init_func_plt(ax,ax2)
+        init_func_plt = self._make_init_func_plt(ax,ax2)
+        # Compose object
         animation = FuncAnimation(fig=fig, 
                             func=self.draw_figure_plt,
                             init_func=init_func_plt,
@@ -327,7 +348,10 @@ class Manager:
                             cache_frame_data=self.cache_history,
                             blit=blit)
         
-        # Optionally save video
+        print("Now rendering frames for each time step - [italic]not displaying real time[/italic]")
+        print("")
+
+        # 3. Optionally save video
         if self.save_video:
             # Make sure parent path exists
             self.vid_path.parent.mkdir(parents=True, exist_ok=True)
@@ -336,11 +360,27 @@ class Manager:
             print("\n")
             print(f"Saved simulation as mp4 at {self.vid_path}.")
         
-        # Play video on loop
+        # 4. Play video on loop
         plt.show()
 
-    # ---- SETUP FIGURE ----
+    # ---- FIGURE SETUP ----
     def setup_figure_plt(self):
+        """
+        Set up matplotlib figure and axes objects
+
+        Does the following:
+        1. Optionally creates subplot figure with frame axes and graph axes
+           Otherwise sets up single axes figure.
+        2. Set tight layout with invisible ticks and axes
+        3. Draws frame backdrop with user supplied (or default) function
+        4. Adds title
+
+        Returns:
+            fig (plt.Figure): Main plot window figure 
+            ax (plt.Axes): Main plot frame axes
+            ax2 (plt.Axes): Optional graph axes
+        """
+        # 1. Set up figure and axes
         # Initialise as None
         fig, ax, ax2 = None, None, None
 
@@ -366,7 +406,6 @@ class Manager:
             # Initialise ax2 by plotting dimensions
             max_time = int(self.num_timesteps)*self.delta_t
             ax2.set_xlim(0, max_time) 
-
         else:
             # Setup figure
             fig, ax = plt.subplots()#figsize=[20,15])
@@ -377,15 +416,8 @@ class Manager:
         # Initialise ax by plotting dimensions
         ax.set_xlim(xmin=0,xmax=Particle.env_x_lim)
         ax.set_ylim(ymin=0,ymax=Particle.env_x_lim)
-        
-        # Add title
-        if self.done_computing:
-            window_title = f"Simulation Engine [{self.simulation_type}] | Step: {self.current_step}/{self.num_steps} | Time: {round(self.current_time,2)}s"
-        else:
-            window_title = f"RENDERING - Please do not quit! | Step: {self.current_step}/{self.num_steps}"
-        fig.canvas.manager.set_window_title(window_title)
 
-        # Set layout for ax
+        # 2. Set tight layout with invisible axes
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
@@ -395,29 +427,38 @@ class Manager:
         ax.set_aspect('equal', adjustable='box')
         fig.tight_layout()
 
-        # Draw backdrop with either default or user supplied backdrop
-        ax = self.draw_backdrop_plt_func(ax)
+        # 3. Draw backdrop with either default or user supplied backdrop
+        self.draw_backdrop_plt_func(ax)
+
+        # 4. Add title
+        if self.done_computing:
+            window_title = f"Simulation Engine [{self.simulation_type}] | Step: {self.current_step}/{self.num_steps} | Time: {round(self.current_time,2)}s"
+        else:
+            window_title = f"RENDERING - Please do not quit! | Step: {self.current_step}/{self.num_steps}"
+        fig.canvas.manager.set_window_title(window_title)
 
         return fig, ax, ax2
-    def make_init_func_plt(self, ax:list[plt.Axes], ax2:list[plt.Axes]=None):
-        # Matplotlib expects FuncAnimation's init_func to have zero arguments.
-        # So we build a function with no arguments inside a scope that has the arguments
-        def init_func_plt():
-            # Initialise the matplotlib 'artists' for each particle and background sprite
-            artists = []
-            artists += self.setup_frame_plt(ax)
-            # TODO: Add any graph artists
-            return artists
-        return init_func_plt
     
     def setup_frame_plt(self, ax:plt.Axes):
-        # Decide if tracking the COM in each frame
+        """
+        Setup main matplotlib frame axes object
+
+        1. Optionally works out scene's centre of mass and scale
+        2. Iterates through each child particle and environment instance and plots to ax
+
+        Args:
+            ax (plt.Axes): Main plot frame axes
+
+        Returns:
+            list: List of matplotlib 'artist' objects, mixed classes
+        """
+        # 1. Decide if tracking the COM in each frame
         com, scene_scale = None, None
         if Particle.track_com:
             com = Particle.centre_of_mass()
             scene_scale = Particle.scene_scale()
 
-        # Update particle and environment artists
+        # 2. Update particle and environment artists
         artists = []
         for environment_object_type, environment_objects_list in self.state["Environment"].items():
             for environment_object in environment_objects_list:
@@ -426,35 +467,129 @@ class Manager:
             artists += particle.draw_plt(ax, com,scene_scale)
         return artists
     
-    # ---- DRAW FIGURE ----
-    def draw_figure_plt(self, timestep, ax:list[plt.Axes], ax2:list[plt.Axes]=None):
-        # Get the right state
-        self.load_state_at_timestep(timestep)
+    def _make_init_func_plt(self, ax:list[plt.Axes], ax2:list[plt.Axes]=None):
+        """
+        Factory function to build init_func_plt, a zero-argument wrapper of setup_frame_plt.
+        
+        Matplotlib expects FuncAnimation's init_func to have zero arguments, 
+        but we'd like to pass self.setup_frame_plt an 'ax' argument
+        So we build a zero-argument wrapper function via a factory with ax in scope.
 
-        # Print current frame - this will usually be silenced by rich progress bar until rendering done
-        print(f"--> [italic]Displaying Frame[/italic][{self.current_step} / {self.num_steps}]" ,end="\r", flush=True)
+        Args:
+            ax (list[plt.Axes]): Main simulation window's axis, inside list wrapper
+            ax2 (list[plt.Axes], optional): Optional simulation window graph axis, inside list wrapper
 
+        Returns:
+            function: zero-argument wrapper function of setup_frame_plt
+        """
+        def init_func_plt():
+            return self.setup_frame_plt(ax)
+        return init_func_plt
+
+    # ---- MAIN CALLABLE ----
+    def draw_figure_plt(self, timestep:int, ax:list[plt.Axes], ax2:list[plt.Axes]=None):
+        """
+        Main matplotlib timestep function called by a FuncAnimation object at each timestep.
+
+        Does the following:
+        1. Manages the loop metadata and tracks when we loop or finish rendering
+        2. Loads the simulation state at the given timestep, (either through computation or loading)
+        3. Calls the draw_frame_plt and draw_graph_plt functions, collecting matplotlib artists.
+
+        Args:
+            timestep (int): Timestep
+            ax (list[plt.Axes]): Main simulation window's axis, inside list wrapper
+            ax2 (list[plt.Axes], optional): Optional simulation window graph axis, inside list wrapper
+
+        Returns:
+            list: List of matplotlib 'artist' objects, mixed classes
+        """
         # Unpack ax, ax2 from wrapper
         ax = ax[0]
         ax2 = ax2[0]
 
-        # Collect matplotlib artists
-        artists = []
+        # 1. Loop management
+        self._loop_management_plt(timestep)
 
-        # Draw frame and graph onto existing axes, return artists
+        # 2. Get the state
+        self._load_state_at_timestep_plt(timestep)
+
+        # Print current frame - this will usually be silenced by rich progress bar until rendering done
+        print(f"--> [italic]Displaying Frame[/italic][{self.current_step} / {self.num_steps}]" ,end="\r", flush=True)
+
+        # 3. Draw frame and graph onto existing axes, return artists
+        artists = []
         artists += self.draw_frame_plt(ax)
         if self.show_graph:
             artists += self.draw_graph_plt(ax2)
         
         return artists
+    
+    def _loop_management_plt(self, timestep):
+        """
+        Tracks when matplotlib FuncAnimation has finished rendering and loops,
+        updating internal records.
+
+        Args:
+            timestep (int): Timestep
+        """
+        # Reset after loop
+        if self.just_looped:
+            if not self.done_computing:
+                self.done_computing = True
+                print("")
+                print("[green]Finished Rendering![/green] 🐸")
+                print("")
+                print("Now displaying finished rendered frames in real time!")
+                print("Press 'Q' in the plot window to exit.")
+                print("")
+            self.current_time = 0
+            self.current_step = -1
+            self.just_looped = False
+        # Check for loop
+        if timestep == self.num_steps-1:
+            self.just_looped = True
+    
+    def _load_state_at_timestep_plt(self, timestep):
+        """
+        Loads the simulation state at the given timestep.
+        Also manages 
+
+        This will be computed if necessary,
+        otherwise it will be loaded from the self.history cache, 
+        or failing this the NDJSON log.
+
+        Args:
+            timestep (_type_): _description_
+        """
+        if self.sync_compute_and_rendering and \
+            (not self.done_computing or \
+            (not self.cache_history and not self.write_log)):
+            # Synchronous - we compute while rendering
+            self.update()                
+        else:
+            # Asynchronous - we've already computed steps
+            self.copy_state(self.get_state_at_timestep(timestep))
+            # Update time
+            self.current_step += 1
+            self.current_time += self.delta_t
 
     # ---- DRAW FRAME ----
     def draw_frame_plt(self, ax:plt.Axes):
-        '''
+        """
         Draw all objects in the simulation's current state onto a supplied matplotlib ax object.
-        '''
-        
-        # Add figure title
+
+        1. Sets titles based on timestep
+        2. Optionally works out scene's centre of mass and scale
+        3. Iterates through each child particle and environment instance and plots to ax
+
+        Args:
+            ax (plt.Axes): Main plot frame axes
+
+        Returns:
+            list: List of matplotlib 'artist' objects, mixed classes
+        """
+        # 1. Add figure, ax titles
         normal_title = f"Simulation Engine [{self.simulation_type}] | Step: {self.current_step}/{self.num_steps} | Time: {round(self.current_time,2)}s"
         render_title = f"RENDERING - Please do not quit! | Step: {self.current_step}/{self.num_steps}"
         if self.done_computing:
@@ -463,36 +598,51 @@ class Manager:
             window_title = render_title
         fig = ax.get_figure()
         fig.canvas.manager.set_window_title(window_title)
-
-        # Add ax title
         ax.set_title(normal_title)
 
-        # Decide if tracking the COM in each frame
+        # 2. Decide if tracking the COM in each frame
         com, scene_scale = None, None
         if Particle.track_com:
             com = Particle.centre_of_mass()
             scene_scale = Particle.scene_scale()
 
-        # Update particle and environment artists
+        # 3. Update particle and environment artists
         artists = []
-        artists += self.draw_environment_objects_plt(ax, com, scene_scale)
-        artists += self.draw_particle_objects_plt(ax, com, scene_scale)
+        artists += self._draw_environment_objects_plt(ax, com, scene_scale)
+        artists += self._draw_particle_objects_plt(ax, com, scene_scale)
 
         return artists
 
     @staticmethod
-    def default_draw_backdrop_plt(ax:plt.Axes):
+    def _default_draw_backdrop_plt(ax:plt.Axes):
+        """
+        Default function to draw a background onto a matplotlib axes.
+        Ideally replaced by a particular simulation type's own function.
+
+        Args:
+            ax (plt.Axes): Main plot frame axes
+        """
         # Default background for matplotlib frames if not specified by user
         ax.set_xlim(-1, Particle.env_x_lim+1)
         ax.set_ylim(-1, Particle.env_y_lim+1)
 
         # Black background
         ax.set_facecolor('k')
-        return ax
     
-    draw_backdrop_plt_func = default_draw_backdrop_plt
+    draw_backdrop_plt_func = _default_draw_backdrop_plt
 
-    def draw_environment_objects_plt(self, ax:plt.Axes, com, scene_scale):
+    def _draw_environment_objects_plt(self, ax:plt.Axes, com, scene_scale):
+        """
+        Draw all environment child objects onto a given matplotlib axes.
+
+        Args:
+            ax (plt.Axes): Main plot frame axes
+            com (np.ndarray): 2D centre of mass of all Particle objects
+            scene_scale (float): Size of range between furthest Particle objects
+
+        Returns:
+            list: List of matplotlib 'artist' objects, mixed classes
+        """
         # Draw all environment objects from state dictionary onto supplied Matplotlib.pyplot ax object
         artists = []
         for environment_object_type, environment_objects_list in self.state["Environment"].items():
@@ -500,7 +650,18 @@ class Manager:
                 artists += environment_object.draw_plt(ax, com,scene_scale)
         return artists
     
-    def draw_particle_objects_plt(self, ax:plt.Axes, com, scene_scale):
+    def _draw_particle_objects_plt(self, ax:plt.Axes, com, scene_scale):
+        """
+        Draw all particle child objects onto a given matplotlib axes.
+
+        Args:
+            ax (plt.Axes): Main plot frame axes
+            com (np.ndarray): 2D centre of mass of all Particle objects
+            scene_scale (float): Size of range between furthest Particle objects
+
+        Returns:
+            list: List of matplotlib 'artist' objects, mixed classes
+        """
         # Draw all particle objects from state dictionary onto supplied Matplotlib.pyplot ax object
         artists = []
         for particle in self.iterate_all_particles():
@@ -509,21 +670,36 @@ class Manager:
     
     # ---- DRAW GRAPH ----
     def draw_graph_plt(self, ax2:plt.Axes):
-        # Oversee drawing a graph onto an axis
-        # Add any shared functionality here
+        """
+        Draw graph corresponding to current state onto given axes.
+
+        Args:
+            ax (plt.Axes): Main plot frame axes
+
+        Returns:
+            list: List of matplotlib 'artist' objects, mixed classes
+        """
+        # TODO: Add any shared functionality here
+        # Currently just wrapping draw_graph_plt_func
         artists = []
         artists += self.draw_graph_plt_func(ax2)
         return artists
 
     @staticmethod
-    def default_draw_graph_plt(self, ax2:plt.Axes):
-        # Default graph if not specified by user
+    def _default_draw_graph_plt(self, ax2:plt.Axes):
+        """
+        Default function to draw graph corresponding to current state onto given axes.
+        Ideally replaced by a particular simulation type's own function.
+
+        Args:
+            ax (plt.Axes): Main plot frame axes
+        """
         artists = []
         max_time = int(self.num_timesteps)*self.delta_t
         ax2.set_xlim(0, max_time)  # Set x-axis limits
         return artists
     
-    draw_graph_plt_func = default_draw_graph_plt
+    draw_graph_plt_func = _default_draw_graph_plt
 
 
 # ------------------------------------------------------------------------------------------------------------------------
@@ -666,7 +842,7 @@ class Logger:
             self._offset_indices = offset_indices
         return self._offset_indices
 
-    def get_state_at_timestep(self, timestep:int):
+    def read_log_at_timestep(self, timestep:int):
         """
         Read the NDJSON log for the state at given timestep,
         return nested state dictionary for setting Manager.state
@@ -726,33 +902,3 @@ class Logger:
             # Yield final partial chunk
             if chunk:
                 yield chunk
-
-
-'''
-TODO:
-Subtle issue
-When we append to history, we append self.state
-But then we get a history full of the same exact self.state object, and each
-part of the self.history list updates with each timestep
-
-Instead we want to use deepcopy(self.state).
-But then the artists inside each have not been initialised
-So they must be initialised - this is solved
-But then because each history state is a different object, each artist is different
-So we track more and more artists
-When really we want the same artists to be throughout
-
-So we need a self.state update function!
-This takes an object from history and makes the relevant changes
-    
-TODO: 
-Look through git changes
-It doesnt work, and it used to. Get this back.
-
-Then fix the whole of the FuncAnimation and iter stuff.
-Want a window to pop up, want the video to work, getting silly
-
-Need it to stop calculating at a certain point, and just behave like normal.
-So frustrating
-
-'''
