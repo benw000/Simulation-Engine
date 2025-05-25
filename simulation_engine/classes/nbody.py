@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.stats import loguniform
+import matplotlib.pyplot as plt
 
 from simulation_engine.utils.errors import SimulationEngineInputError
 from simulation_engine.classes.parents import Particle, Environment
@@ -128,12 +129,7 @@ class Star(Particle):
         self.colour = np.random.rand()/2 + 0.5
 
         # Initialise more
-        self.plt_artist = None
-
-    def create_instance(self, id):
-        # TODO: Do we need this?
-        ''' Used to create instance of the same class as self, without referencing class. '''
-        return Star(id=id)
+        self.plt_artists = None
 
     # -------------------------------------------------------------------------
     # Main force model
@@ -220,20 +216,7 @@ class Star(Particle):
     # -------------------------------------------------------------------------
     
     # ---- MATPLOTLIB ----
-    def init_plt(self, ax, com=None, scale=None):
-        ''' 
-        Initialises individual Star particle as a matplotlib artist object,
-        plotted onto a supplied ax object 
-        '''
-        # Get plot position in frame
-        plot_position = self.orient_to_com(com, scale)
-
-        # Initialise PathCollection artist as scatter plot point
-        self.plt_artist = ax.scatter(plot_position[0],plot_position[1], \
-                                     s=self.size,c=[self.colour], cmap='gray', \
-                                     vmin=0,vmax=1 )
-    
-    def draw_plt(self, ax, com=None, scale=None):
+    def draw_plt(self, ax:plt.Axes, com=None, scale=None):
         '''
         Updates the stored self.plt_artist PathCollection with new position
         '''
@@ -241,14 +224,17 @@ class Star(Particle):
         plot_position = self.orient_to_com(com, scale)
 
         # Update artist with PathCollection.set_offsets setter method
-        if self.plt_artist is None:
+        if self.plt_artists is None:
             # Initialise PathCollection artist as scatter plot point
-            self.plt_artist = ax.scatter(plot_position[0],plot_position[1], \
+            self.plt_artists = []
+            self.plt_artists.append(ax.scatter(plot_position[0],plot_position[1], \
                                      s=self.size,c=[self.colour], cmap='gray', \
-                                     vmin=0,vmax=1 )
+                                     vmin=0,vmax=1 ))
         else:
             # Update with offset
-            self.plt_artist.set_offsets(plot_position)
+            self.plt_artists[0].set_offsets(plot_position)
+        
+        return self.plt_artists
 
 
 
