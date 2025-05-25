@@ -50,9 +50,6 @@ class Manager:
         Environment.manager = self
         Particle.manager = self
 
-        self.done_computing = False
-        self.just_looped = False
-
         # ---- Unpack entrypoint args ----
         # Mode arguments
         self.mode = args.mode
@@ -66,6 +63,8 @@ class Manager:
         self.delta_t: float = args.deltat
         self.current_time = 0
         self.current_step = 0
+        self.done_computing = False
+        self.just_looped = False
 
         # Cache, log, sync bool flags
         self.write_log = args.log
@@ -89,6 +88,7 @@ class Manager:
         else:
             log_path = default_log_path
         # Such nice logic 🥹
+
         # Initialise Logger
         self.logger = Logger(manager=self, log_path=log_path, chunk_size=args.log_read_chunk_size)
 
@@ -173,7 +173,7 @@ class Manager:
         table.add_row("🕹️  Interactive", "-i, --interactive", f"{self.interactive}")
         table.add_row(long_line_divide, short_line_divide, long_line_divide)
 
-        table.add_row("💯 Total number of timesteps","-t, --steps" f"{self.num_steps}")
+        table.add_row("💯 Total number of timesteps","-t, --steps", f"{self.num_steps}")
         table.add_row("⏳ Timestep duration (delta t)","-d, --deltat", f"{self.delta_t}")
         table.add_row(long_line_divide, short_line_divide, long_line_divide)
 
@@ -264,7 +264,7 @@ class Manager:
             self.update()                
         else:
             # Asynchronous - we've already computed steps
-            self.update_state(self._read_state_at_timestep(timestep))
+            self.copy_state(self._read_state_at_timestep(timestep))
             self.current_step += 1
             self.current_time += self.delta_t
     
@@ -277,20 +277,19 @@ class Manager:
         else:
             raise Exception("Neither cache or log written but trying to read! in _read_state_at_timestep!")
 
-    def update_state(self, new_state):
-        # TODO: write comment about why this is needed, deepcopy issue
+    def copy_state(self, new_state):
         for key, val in self.state.items():
             if key in ["Particle", "Environment"]:
                 if key == "Particle":
                     for child_class_name, child_class_dict in val.items():
                         for id, child in child_class_dict.items():
                             new_object = new_state[key][child_class_name][id]
-                            child.update_state(new_object)
+                            child.copy_state(new_object)
                 elif key == "Environment":
                     for child_class_name, child_class_list in val.items():
                         for idx, child in enumerate(child_class_list):
                             new_object = new_state[key][child_class_name][idx]
-                            child.update_state(new_object)
+                            child.copy_state(new_object)
             # Assuming all other keys are simple, not objects
             else:
                 self.state[key] = new_state[key]
@@ -311,14 +310,22 @@ class Manager:
         # Setup a matplotlib FuncAnimation of draw_figure_plt
         # (draw_figure_plt handles updating/loading state)
         interval_between_frames = self.delta_t*1000 # milliseconds
+        # Wrap the frames iterator in a custom rich progress bar
         frames_iterator = self.rich_progress(range(self.num_steps),description="[bold]Rendering Progress[/bold]")
+        # Use returned artists collected by draw_figure_plt to selectively update based on changes
+        # Tried implementing but getting bugs, move on
+        blit = False
+        # Create a zero-argument init_func inside a scope that can see our desired arguments
+        init_func_plt = self.make_init_func_plt(ax,ax2)
         animation = FuncAnimation(fig=fig, 
                             func=self.draw_figure_plt,
+                            init_func=init_func_plt,
                             frames=frames_iterator,
                             fargs=([ax],[ax2]), 
                             interval=interval_between_frames,
                             repeat=True,
-                            cache_frame_data=self.cache_history)
+                            cache_frame_data=self.cache_history,
+                            blit=blit)
         
         # Optionally save video
         if self.save_video:
@@ -338,6 +345,7 @@ class Manager:
         fig, ax, ax2 = None, None, None
 
         if self.show_graph:
+            # TODO: Should there be a setup graph function?
             # Setup figure with 2 subplots
             fig = plt.figure(figsize=(10, 5))
 
@@ -367,7 +375,8 @@ class Manager:
             fig.set_size_inches(width, height)
 
         # Initialise ax by plotting dimensions
-        ax.set(xlim=[0,Particle.env_x_lim], ylim=[0,Particle.env_x_lim])
+        ax.set_xlim(xmin=0,xmax=Particle.env_x_lim)
+        ax.set_ylim(ymin=0,ymax=Particle.env_x_lim)
         
         # Add title
         if self.done_computing:
@@ -377,24 +386,31 @@ class Manager:
         fig.canvas.manager.set_window_title(window_title)
 
         # Set layout for ax
-        ax.clear()
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
         ax.xaxis.set_ticks([])
         ax.yaxis.set_ticks([])
-        ax.set_aspect('equal', adjustable='datalim')
+        ax.set_aspect('equal', adjustable='box')
         fig.tight_layout()
 
         # Draw backdrop with either default or user supplied backdrop
         ax = self.draw_backdrop_plt_func(ax)
 
-        # Initialise the matplotlib 'artists' for each particle and background sprite
-        ax = self.setup_frame_plt(ax)
         return fig, ax, ax2
+    def make_init_func_plt(self, ax:list[plt.Axes], ax2:list[plt.Axes]=None):
+        # Matplotlib expects FuncAnimation's init_func to have zero arguments.
+        # So we build a function with no arguments inside a scope that has the arguments
+        def init_func_plt():
+            # Initialise the matplotlib 'artists' for each particle and background sprite
+            artists = []
+            artists += self.setup_frame_plt(ax)
+            # TODO: Add any graph artists
+            return artists
+        return init_func_plt
     
-    def setup_frame_plt(self, ax):
+    def setup_frame_plt(self, ax:plt.Axes):
         # Decide if tracking the COM in each frame
         com, scene_scale = None, None
         if Particle.track_com:
@@ -402,16 +418,16 @@ class Manager:
             scene_scale = Particle.scene_scale()
 
         # Update particle and environment artists
+        artists = []
         for environment_object_type, environment_objects_list in self.state["Environment"].items():
             for environment_object in environment_objects_list:
-                environment_object.init_plt(ax, com,scene_scale)
+                artists += environment_object.draw_plt(ax, com,scene_scale)
         for particle in self.iterate_all_particles():
-            particle.init_plt(ax, com,scene_scale)
-
-        return ax
+            artists += particle.draw_plt(ax, com,scene_scale)
+        return artists
     
     # ---- DRAW FIGURE ----
-    def draw_figure_plt(self, timestep, ax, ax2=None):
+    def draw_figure_plt(self, timestep, ax:list[plt.Axes], ax2:list[plt.Axes]=None):
         # Get the right state
         self.load_state_at_timestep(timestep)
 
@@ -422,24 +438,34 @@ class Manager:
         ax = ax[0]
         ax2 = ax2[0]
 
-        # Draw frame and graph onto existing axes
-        self.draw_frame_plt(ax)
+        # Collect matplotlib artists
+        artists = []
+
+        # Draw frame and graph onto existing axes, return artists
+        artists += self.draw_frame_plt(ax)
         if self.show_graph:
-            self.draw_graph_plt(ax2)
+            artists += self.draw_graph_plt(ax2)
+        
+        return artists
 
     # ---- DRAW FRAME ----
-    def draw_frame_plt(self, ax):
+    def draw_frame_plt(self, ax:plt.Axes):
         '''
         Draw all objects in the simulation's current state onto a supplied matplotlib ax object.
         '''
         
-        # Add title
+        # Add figure title
+        normal_title = f"Simulation Engine [{self.simulation_type}] | Step: {self.current_step}/{self.num_steps} | Time: {round(self.current_time,2)}s"
+        render_title = f"RENDERING - Please do not quit! | Step: {self.current_step}/{self.num_steps}"
         if self.done_computing:
-            window_title = f"Simulation Engine [{self.simulation_type}] | Step: {self.current_step}/{self.num_steps} | Time: {round(self.current_time,2)}s"
+            window_title = normal_title
         else:
-            window_title = f"RENDERING - Please do not quit! | Step: {self.current_step}/{self.num_steps}"
+            window_title = render_title
         fig = ax.get_figure()
         fig.canvas.manager.set_window_title(window_title)
+
+        # Add ax title
+        ax.set_title(normal_title)
 
         # Decide if tracking the COM in each frame
         com, scene_scale = None, None
@@ -448,13 +474,14 @@ class Manager:
             scene_scale = Particle.scene_scale()
 
         # Update particle and environment artists
-        ax = self.draw_environment_objects_plt(ax, com, scene_scale)
-        ax = self.draw_particle_objects_plt(ax, com, scene_scale)
+        artists = []
+        artists += self.draw_environment_objects_plt(ax, com, scene_scale)
+        artists += self.draw_particle_objects_plt(ax, com, scene_scale)
 
-        return ax
+        return artists
 
     @staticmethod
-    def default_draw_backdrop_plt(ax):
+    def default_draw_backdrop_plt(ax:plt.Axes):
         # Default background for matplotlib frames if not specified by user
         ax.set_xlim(-1, Particle.env_x_lim+1)
         ax.set_ylim(-1, Particle.env_y_lim+1)
@@ -465,32 +492,36 @@ class Manager:
     
     draw_backdrop_plt_func = default_draw_backdrop_plt
 
-    def draw_environment_objects_plt(self, ax, com, scene_scale):
+    def draw_environment_objects_plt(self, ax:plt.Axes, com, scene_scale):
         # Draw all environment objects from state dictionary onto supplied Matplotlib.pyplot ax object
+        artists = []
         for environment_object_type, environment_objects_list in self.state["Environment"].items():
             for environment_object in environment_objects_list:
-                environment_object.draw_plt(ax, com,scene_scale)
-        return ax
+                artists += environment_object.draw_plt(ax, com,scene_scale)
+        return artists
     
-    def draw_particle_objects_plt(self, ax, com, scene_scale):
+    def draw_particle_objects_plt(self, ax:plt.Axes, com, scene_scale):
         # Draw all particle objects from state dictionary onto supplied Matplotlib.pyplot ax object
+        artists = []
         for particle in self.iterate_all_particles():
-            particle.draw_plt(ax, com,scene_scale)
-        return ax
+            artists += particle.draw_plt(ax, com,scene_scale)
+        return artists
     
     # ---- DRAW GRAPH ----
-    def draw_graph_plt(self, ax2):
+    def draw_graph_plt(self, ax2:plt.Axes):
         # Oversee drawing a graph onto an axis
         # Add any shared functionality here
-        self.draw_graph_plt_func(ax2)
-        return ax2
+        artists = []
+        artists += self.draw_graph_plt_func(ax2)
+        return artists
 
     @staticmethod
-    def default_draw_graph_plt(self, ax2):
+    def default_draw_graph_plt(self, ax2:plt.Axes):
         # Default graph if not specified by user
+        artists = []
         max_time = int(self.num_timesteps)*self.delta_t
         ax2.set_xlim(0, max_time)  # Set x-axis limits
-        return ax2
+        return artists
     
     draw_graph_plt_func = default_draw_graph_plt
 
