@@ -4,7 +4,6 @@ from pathlib import Path
 from copy import deepcopy
 from datetime import datetime
 
-import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.gridspec import GridSpec
@@ -206,7 +205,7 @@ class Manager:
         Returns:
             dict: Nested state dictionary to use for setting Manager.state
         """
-        if self.cache_history:
+        if self.cache_history and not self.mode == "load":
             return self.history[timestep]
         elif self.write_log:
             return self.logger.read_log_at_timestep(timestep)
@@ -233,9 +232,7 @@ class Manager:
                         for idx, child in enumerate(child_class_list):
                             new_object = new_state[key][child_class_name][idx]
                             child.copy_state(new_object)
-            # Assuming all other keys are simple, not objects
-            else:
-                self.state[key] = new_state[key]
+    
 
     # =============================================================
 
@@ -281,7 +278,22 @@ class Manager:
             self.animate_plt()
 
     def load(self):
-        raise NotImplementedError
+        """
+        Main pipeline function for 'load' mode.
+
+        1. Reads supplied log for simulation metadata used for running
+        2. Renders simulation timesteps with chosen rendering framework (eg matplotlib)
+        """
+        # 1. Read log for metadata
+        # Load the first state to get delta_t, env_x_lim, env_y_lim, track_com and torus
+        self.state = self.get_state_at_timestep(1)
+        # Get number of lines as num steps
+        self.num_steps = len(self.logger.offset_indices) - 1
+        
+        # 2. Split by rendering framework
+        if self.render_framework == "matplotlib":
+            self.animate_plt()
+
     
     def update(self):
         """
@@ -569,7 +581,7 @@ class Manager:
             self.update()                
         else:
             # Asynchronous - we've already computed steps
-            self.copy_state(self.get_state_at_timestep(timestep))
+            self.copy_state(self.get_state_at_timestep(timestep+1))
             # Update time
             self.current_step += 1
             self.current_time += self.delta_t
@@ -726,7 +738,7 @@ class Logger:
         self.log_path = log_path
         self.chunk_size = chunk_size
         self._offset_indices: list[int] = None
-        self.manager = manager
+        self.manager: Manager = manager
 
         # Initialise log file
         if self.manager.write_log:
@@ -770,7 +782,7 @@ class Logger:
                 new_dict[key]=val
         return new_dict
     
-    def load_state_from_dict(self, dict):
+    def load_state_from_dict(self, json_dict):
         """
         Load a state dictionary from a compressed dictionary read from an NDJSON log file.
         Iterates through all child Particle and Environment classes,
@@ -783,7 +795,7 @@ class Logger:
             dict: Nested state dictionary to be used to create a Manager.state dict
         """
         new_state = {}
-        for key, val in dict.items():
+        for key, val in json_dict.items():
             # Create nested dict for Particle and Environment using .to_dict() methods
             if key in ["Particle", "Environment"]:
                 new_state[key] = {}
@@ -802,6 +814,16 @@ class Logger:
             # Assuming all other keys are simple
             else:
                 new_state[key]=val
+        # Unpack metadata to manager
+        self.simulation_type = json_dict["type"]
+        self.delta_t = json_dict["delta_t"] 
+        self.current_step = json_dict["step"]
+        self.current_time = json_dict["time"] 
+        Particle.env_x_lim = json_dict["env_x_lim"]
+        Particle.env_y_lim = json_dict["env_y_lim"]
+        Particle.track_com = json_dict["track_com"]
+        Particle.torus = json_dict["torus"]
+        
         return new_state
     
     def append_current_state(self, state):
@@ -812,7 +834,20 @@ class Logger:
         Args:
             state (dict): Nested state dictionary from Manager.state
         """
+        # Write main dictionary
         new_dict = self.write_state_to_dict(state)
+
+        # Add metadata
+        new_dict["type"] = self.manager.simulation_type
+        new_dict["delta_t"] = self.manager.delta_t
+        new_dict["step"] = self.manager.current_step
+        new_dict["time"] = self.manager.current_time
+        new_dict["env_x_lim"] = Particle.env_x_lim
+        new_dict["env_y_lim"] = Particle.env_y_lim
+        new_dict["track_com"] = Particle.track_com
+        new_dict["torus"] = Particle.torus
+
+        # Append to NDJSON
         with open(self.log_path, "a") as f:
             f.write(json.dumps(new_dict)+"\n")
 
