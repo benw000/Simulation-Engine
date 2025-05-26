@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import argparse
 from rich import print
 from pathlib import Path
@@ -39,8 +40,12 @@ def validate_mode_args(args):
     type = args.type
     interactive = args.interactive
 
+    # Can't fill in type unless in load mode
+    if not type and not mode == 'load':
+        raise SimulationEngineInputError(f"(argument 2): Please supply a simulation type from the list {IMPLEMENTED_TYPES}")
+
     # Can't run unimplemented type
-    if type not in IMPLEMENTED_TYPES:
+    if type not in IMPLEMENTED_TYPES+[None]:
         raise NotImplementedError(f"Type {type} not yet implemented!")
     
     # Can't run interactive when in load mode
@@ -76,11 +81,12 @@ def validate_setup_args(args):
     
     # Number of classes - note individual setup function needs to validate length of list
     nums = args.nums
-    for num in nums:
-        if num < 0:
-            raise SimulationEngineInputError(f"(-n, --nums): Please enter positive (>0) integer number(s) for starting population(s) of particles. Got {nums}")
-        if num > 1000:
-            print(f"Warning: User has set high starting population(s) ({nums})")
+    if nums:
+        for num in nums:
+            if num < 0:
+                raise SimulationEngineInputError(f"(-n, --nums): Please enter positive (>0) integer number(s) for starting population(s) of particles. Got {nums}")
+            if num > 1000:
+                print(f"Warning: User has set high starting population(s) ({nums})")
 
 def validate_memory_args(args):
     """
@@ -183,6 +189,26 @@ def validate_filepath_args(args):
         if not Path(log_path).exists():
             raise SimulationEngineInputError(f"Supplied log path doesnt exist: {log_path}")
 
+def get_type(args):
+    # Early return for non-load modes
+    mode = args.mode
+    if mode != "load":
+        return args.type
+    
+    # Get log path
+    log_path = args.log_path
+    log_name = args.log_name
+    log_folder = args.log_folder
+    if not log_path:
+        log_path = Path(log_folder) / Path(log_name)
+
+    # Read first line of log for type
+    with open(log_path, 'r') as f:
+        first_line = f.readline()
+        line_dict = json.loads(first_line)
+
+    return line_dict["type"]
+
 # ---- MAIN ---
 def main(args):
     """
@@ -207,8 +233,10 @@ def main(args):
     validate_filepath_args(args)
 
     # ---- SETUP MANAGER ----
+    args.type = get_type(args)
     setup_func =  SETUP_FUNC_DICT[args.type]
     manager: Manager = setup_func(args)
+    manager.print_settings_table()
     
     # ---- RUN MANAGER ----
     manager.start()
@@ -230,7 +258,7 @@ if __name__=="__main__":
     # ---- Arguments ----
     # Mode and type of simulation
     parser.add_argument('mode', type=str, choices=["run", "load"], help="The mode to run the simulation in: 'run' for normal simulation building, 'load' to load from a ndjson log")
-    parser.add_argument('type', type=str, choices=["evac", "birds", "nbody", "springs", "pool"], help='The type of simulation to run')
+    parser.add_argument('type', type=str, nargs='?', choices=IMPLEMENTED_TYPES, help='The type of simulation to run', default=None)
     parser.add_argument('-i','--interactive', action='store_true', help="Use this flag to in run mode to run interactively (like a game)", default=False)
     # Simulation setup
     parser.add_argument('-t','--steps', type=int, help='The number of timesteps in the simulation', default=100)
