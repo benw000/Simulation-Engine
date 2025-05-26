@@ -17,36 +17,32 @@ def setup(args):
     Args:
         args (argparse.Namespace): argparse namespace of user supplied arguments
     """
-    # TODO: Put common operations in here after implementing both modes
-    # See if any of this can be put into manager itself
-    # Ideally the individual types have to do less
+    # Create manager instance
+    manager = Manager(args = args, 
+                      show_graph = False,
+                      draw_backdrop_plt_func = draw_backdrop_plt)
+    
+    # Add Star child class to registry
+    manager.class_objects_registry["Star"] = Star
 
+    # Split by mode
     if args.mode == 'run':
-        return setup_run(args)
+        return setup_run(args, manager)
     elif args.mode == 'load':
-        return setup_load(args)
+        return setup_load(args, manager)
 
-def setup_run(args):
+def setup_run(args, manager):
     # ---- VALIDATE ARGS ----
     if not len(args.nums) == 1:
         raise SimulationEngineInputError("(-n, --nums) Please only supply 1 argument for population when using nbody simulation type")
 
-    # ---- CREATE MANAGER ----
-    manager = Manager(args = args, 
-                      show_graph = False,
-                      draw_backdrop_plt_func = draw_backdrop_plt)
-
     # TODO: For other modes, initialise environment object list and add to manager state dict
     
-
     # Set Particle geometry attributes
     Particle.env_x_lim = 1000
     Particle.env_y_lim = 1000
     Particle.track_com = True
     Particle.torus = False
-
-    # Add Star child class to registry
-    manager.class_objects_registry["Star"] = Star
 
     # Initialise particles - could hide this in Particle but nice to be explicit
     num_stars = args.nums[0]
@@ -63,19 +59,17 @@ def setup_run(args):
 
     return manager
 
-def setup_load(args):
-    raise NotImplementedError
-
+def setup_load(args, manager):
+    # Not sure theres any more to do
+    return manager
+    
 def draw_backdrop_plt(ax):
     """
     Get an ax from manager, and plot things on it related to this mode
     Overrides Manager.default_draw_backdrop_plt
 
     Args:
-        ax (_type_): _description_
-
-    Returns:
-        _type_: _description_
+        ax (plt.Axes): Main matplotlib frame
     """
     # Set padded limits
     ax.set_xlim(-1, Particle.env_x_lim+1)
@@ -83,9 +77,6 @@ def draw_backdrop_plt(ax):
 
     # Black background
     ax.set_facecolor('k')
-    return ax
-
-
 
 
 
@@ -189,13 +180,7 @@ class Star(Particle):
         # Update idx shift to next id and return
         return idx_shift+11
     
-
-
-
-    #  TODO:
-    # Fill these out in a smart way - can we delegate to Particle?
-    # Use CSV above to give what we need
-    # Once this is done, test script running with logging, bugfix etc...
+    # NDJSON
     def to_dict(self):
         new_dict = super().to_dict()
         new_dict["mass"] = self.mass
@@ -209,6 +194,8 @@ class Star(Particle):
                    unlinked=True)
         instance.acceleration = np.array(dict["acceleration"])
         instance.last_position = np.array(dict["last_position"])
+        instance.mass = dict["mass"]
+        instance.colour = dict["colour"]
         return instance
     
     

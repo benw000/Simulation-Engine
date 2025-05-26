@@ -3,7 +3,75 @@ import numpy as np
 from matplotlib.patches import Polygon
 from matplotlib.transforms import Affine2D
 
+from simulation_engine.utils.errors import SimulationEngineInputError
 from .parents import Particle, Environment
+from simulation_engine.utils.manager import Manager
+
+# =====================================================================================
+
+# ---- SETUP ----
+def setup(args):
+    """
+    Called by main entrypoint script as entry into this simulation 'type' module.
+    Divides between different setup functions for each different 'mode'
+
+    Args:
+        args (argparse.Namespace): argparse namespace of user supplied arguments
+    """
+    # Create manager instance
+    manager = Manager(args = args, 
+                      show_graph = False,
+                      draw_backdrop_plt_func = draw_backdrop_plt)
+    
+    # Add Prey, Predator child classes to registry
+    manager.class_objects_registry["Prey"] = Prey
+    manager.class_objects_registry["Predator"] = Predator
+
+    # Split by mode
+    if args.mode == 'run':
+        return setup_run(args, manager)
+    elif args.mode == 'load':
+        return setup_load(args, manager)
+
+def setup_run(args, manager):
+    # ---- VALIDATE ARGS ----
+    if not len(args.nums) == 2:
+        raise SimulationEngineInputError("(-n, --nums) Please supply 2 arguments for population when using birds simulation type")
+    
+    # Set Particle geometry attributes
+    Particle.env_x_lim = 1000
+    Particle.env_y_lim = 1000
+    Particle.track_com = False
+    Particle.torus = True
+
+    # Initialise particles - could hide this in Particle but nice to be explicit
+    num_prey, num_predators = args.nums[0], args.nums[1]
+    for i in range(num_prey):
+        Prey()
+    for i in range(num_predators):
+        Predator()
+
+    return manager
+
+def setup_load(args, manager):
+    # Not sure theres any more to do
+    return manager
+
+def draw_backdrop_plt(ax):
+    """
+    Get an ax from manager, and plot things on it related to this mode
+    Overrides Manager.default_draw_backdrop_plt
+
+    Args:
+        ax (plt.Axes): Main matplotlib frame
+    """
+    # Set padded limits
+    ax.set_xlim(-1, Particle.env_x_lim+1)
+    ax.set_ylim(-1, Particle.env_y_lim+1)
+
+    # Black background
+    ax.set_facecolor('skyblue')
+
 
 class Prey(Particle):
     '''
@@ -25,23 +93,18 @@ class Prey(Particle):
     random_force = 30
     
     # Initialisation
-    def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, id=None) -> None:
+    def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, unlinked=None) -> None:
         '''
         Initialises a Prey bird, inheriting from the Particle class.
         '''
-        super().__init__(position, velocity, id)
+        super().__init__(position, velocity, unlinked)
 
         # Prey specific attributes
         self.mass = 0.5
         self.max_speed = 20
 
-        # Ensure prototype for child class exists, callable by its name as a string only
-        prototype = copy.copy(self)
-        Particle.prototypes[self.__class__.__name__] = prototype
-
-    def create_instance(self, id):
-        ''' Used to create instance of the same class as self, without referencing class. '''
-        return Prey(id=id)
+        # Initialise more
+        self.polygon = None
 
     # -------------------------------------------------------------------------
     # Distance utilities
@@ -51,8 +114,7 @@ class Prey(Particle):
         Returns instance of nearest predator to prey (self).
         '''
         # Initialise shortest distance as really large number
-        # TODO: make this rely on actual span, not hardcoded
-        shortest_dist = (10**5)**2
+        shortest_dist = Particle.env_x_lim**2 + Particle.env_y_lim**2
         closest_bird = None
         for bird in Predator.iterate_class_instances():
             dist = self.dist(bird) # squared dist
@@ -81,7 +143,7 @@ class Prey(Particle):
 
         # Prey repulsion force - currently scales with 1/d
         for bird in Prey.iterate_class_instances():
-            if bird == self:
+            if bird.id == self.id:
                 continue
             elif self.dist(bird) < Prey.prey_dist_thresh:
                 force_term += - self.unit_dirn(bird)*(self.prey_repulsion_force/(np.sqrt(self.dist(bird))))
@@ -138,6 +200,25 @@ class Prey(Particle):
                                     float(system_state_list[idx_shift+8])])
         # Update idx shift to next id and return
         return idx_shift+9
+    
+    # NDJSON
+    def to_dict(self):
+        new_dict = super().to_dict()
+        new_dict["mass"] = self.mass
+        new_dict["max_speed"] = self.max_speed
+        return new_dict
+    
+    @classmethod
+    def from_dict(cls, dict):
+        instance = cls(position=np.array(dict["position"]),
+                   velocity=np.array(dict["velocity"]),
+                   unlinked=True)
+        instance.acceleration = np.array(dict["acceleration"])
+        instance.last_position = np.array(dict["last_position"])
+        instance.mass = dict["mass"]
+        instance.max_speed = dict["max_speed"]
+
+        return instance
 
     # -------------------------------------------------------------------------
     # Animation utilities
@@ -154,30 +235,37 @@ class Prey(Particle):
                                     [np.sin(angle_rad),  np.cos(angle_rad)]])
         # Apply the rotation to the triangle vertices
         return triangle @ rotation_matrix.T
-
-    def instance_plot(self, ax, com=None, scale=None):
+    
+    def draw_plt(self, ax, com=None, scale=None):
         ''' 
         Plots individual Prey particle onto existing axis. 
         '''
-
         # Get plot position in frame
         plot_position = self.position
         if (com is not None) and (scale is not None):
             plot_position = self.orient_to_com(com, scale)
 
-        # Get direction angle from velocity
-        theta = np.arctan2(self.velocity[1], self.velocity[0]) - np.pi/2
-
-        # Create a Polygon patch to represent the irregular triangle
-        triangle_shape = Prey.create_irregular_triangle(theta)
-        polygon = Polygon(triangle_shape, closed=True, facecolor='white', edgecolor='black')
+        # Update artist with PathCollection.set_offsets setter method
+        if self.polygon is None:
+            # Create a Polygon patch to represent the irregular triangle
+            triangle_shape = Prey.create_irregular_triangle(self.theta)
+            self.polygon = Polygon(triangle_shape, closed=True, facecolor='white', edgecolor='black')
+            
+            # Create and apply transformation of the polygon to the point
+            t = Affine2D().scale(20).translate(plot_position[0], plot_position[1]) + ax.transData
+            self.polygon.set_transform(t)
+            ax.add_patch(self.polygon)
         
-        # Create and apply transformation of the polygon to the point
-        t = Affine2D().translate(plot_position[0], plot_position[1]) + ax.transData
-        polygon.set_transform(t)
+        else:
+            # Recompute orientation
+            triangle_shape = Prey.create_irregular_triangle(self.theta)
 
-        # Plot polygon
-        ax.add_patch(polygon)
+            # Update shape and transform
+            self.polygon.set_xy(triangle_shape)
+            t = Affine2D().scale(20).translate(self.position[0], self.position[1]) + ax.transData
+            self.polygon.set_transform(t)
+                
+        return [self.polygon]
         
 
 
@@ -207,23 +295,17 @@ class Predator(Particle):
     random_force = 5
     
     # Initialisation
-    def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, id = None) -> None:
+    def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, unlinked=False) -> None:
         '''
         Initialises a Predator bird, inheriting from the Particle class.
         '''
-        super().__init__(position, velocity, id)
+        super().__init__(position, velocity, unlinked)
 
-        # Prey specific attributes
+        # Predator specific attributes
         self.mass = 0.5
         self.max_speed = 30
 
-        # Ensure prototype for child class exists, callable by its name as a string only
-        prototype = copy.copy(self)
-        Particle.prototypes[self.__class__.__name__] = prototype
-
-    def create_instance(self, id):
-        ''' Used to create instance of the same class as self, without referencing class. '''
-        return Predator(id=id)
+        self.polygon = None
 
     # -------------------------------------------------------------------------
     # Utilities
@@ -233,8 +315,7 @@ class Predator(Particle):
         Returns instance of nearest pray to predator (self).
         '''
         # Initialise shortest distance as really large number
-        # TODO: make this rely on actual span, not hardcoded
-        shortest_dist = (10**5)**2
+        shortest_dist = Particle.env_x_lim**2 + Particle.env_y_lim**2
         closest_bird = None
         for bird in Prey.iterate_class_instances():
             dist = self.dist(bird) # squared dist
@@ -242,8 +323,6 @@ class Predator(Particle):
                 shortest_dist = dist
                 closest_bird = bird
         return closest_bird
-
-        
 
     # -------------------------------------------------------------------------
     # Main force model 
@@ -267,7 +346,7 @@ class Predator(Particle):
 
         # Predator repulsion force - currently scales with 1/d
         for bird in Predator.iterate_class_instances():
-            if bird == self:
+            if bird.id == self.id:
                 continue
             elif self.dist(bird) < Predator.pred_dist_thresh:
                 force_term += - self.unit_dirn(bird)*(self.pred_repulsion_force/(np.sqrt(self.dist(bird))))
@@ -329,45 +408,57 @@ class Predator(Particle):
                                     float(system_state_list[idx_shift+8])])
         # Update idx shift to next id and return
         return idx_shift+9
+    
+    # NDJSON
+    def to_dict(self):
+        new_dict = super().to_dict()
+        new_dict["mass"] = self.mass
+        new_dict["max_speed"] = self.max_speed
+        return new_dict
+    
+    @classmethod
+    def from_dict(cls, dict):
+        instance = cls(position=np.array(dict["position"]),
+                   velocity=np.array(dict["velocity"]),
+                   unlinked=True)
+        instance.acceleration = np.array(dict["acceleration"])
+        instance.last_position = np.array(dict["last_position"])
+        instance.mass = dict["mass"]
+        instance.max_speed = dict["max_speed"]
+        return instance
 
     # -------------------------------------------------------------------------
     # Animation utilities
 
-    @staticmethod
-    def create_irregular_triangle(angle_rad):
-        '''
-        Create irregular triangle marker for plotting instances.
-        '''
-        # Define vertices for an irregular triangle (relative to origin)
-        triangle = np.array([[-0.5, -1], [0.5, -1], [0.0, 1]])*10
-        # Create a rotation matrix
-        rotation_matrix = np.array([[np.cos(angle_rad), -np.sin(angle_rad)],
-                                    [np.sin(angle_rad),  np.cos(angle_rad)]])
-        # Apply the rotation to the triangle vertices
-        return triangle @ rotation_matrix.T
-
-    def instance_plot(self, ax, com=None, scale=None):
+    def draw_plt(self, ax, com=None, scale=None):
         ''' 
         Plots individual Predator particle onto existing axis. 
         '''
-
         # Get plot position in frame
         plot_position = self.position
         if (com is not None) and (scale is not None):
             plot_position = self.orient_to_com(com, scale)
 
-        # Get direction angle from velocity
-        theta = np.arctan2(self.velocity[1], self.velocity[0]) - np.pi/2
-
-        # Create a Polygon patch to represent the irregular triangle
-        triangle_shape = Prey.create_irregular_triangle(theta)
-        polygon = Polygon(triangle_shape, closed=True, facecolor='red', edgecolor='black')
+        # Update artist with PathCollection.set_offsets setter method
+        if self.polygon is None:
+            # Create a Polygon patch to represent the irregular triangle
+            triangle_shape = Prey.create_irregular_triangle(self.theta)
+            self.polygon = Polygon(triangle_shape, closed=True, facecolor='red', edgecolor='black')
+            
+            # Create and apply transformation of the polygon to the point
+            t = Affine2D().scale(20).translate(plot_position[0], plot_position[1]) + ax.transData
+            self.polygon.set_transform(t)
+            ax.add_patch(self.polygon)
         
-        # Create and apply transformation of the polygon to the point
-        t = Affine2D().scale(20)
-        t = Affine2D().translate(plot_position[0], plot_position[1]) + ax.transData
-        polygon.set_transform(t)
+        else:
+            # Recompute orientation
+            triangle_shape = Prey.create_irregular_triangle(self.theta)
 
-        # Plot polygon
-        ax.add_patch(polygon)
+            # Update shape and transform
+            self.polygon.set_xy(triangle_shape)
+            t = Affine2D().scale(20).translate(self.position[0], self.position[1]) + ax.transData
+            self.polygon.set_transform(t)
+                
+        return [self.polygon]
+
 
