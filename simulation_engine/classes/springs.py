@@ -1,6 +1,73 @@
 import copy
 import numpy as np
-from .parents import Particle
+
+from simulation_engine.utils.errors import SimulationEngineInputError
+from .parents import Particle, Environment
+from simulation_engine.utils.manager import Manager
+
+# =====================================================================================
+
+# ---- SETUP ----
+def setup(args):
+    """
+    Called by main entrypoint script as entry into this simulation 'type' module.
+    Divides between different setup functions for each different 'mode'
+
+    Args:
+        args (argparse.Namespace): argparse namespace of user supplied arguments
+    """
+    # Default timestep
+    if args.deltat is None:
+        args.deltat = 0.05
+
+    # Create manager instance
+    manager = Manager(args = args, 
+                      show_graph = False,
+                      draw_backdrop_plt_func = draw_backdrop_plt)
+    
+    # Add Prey, Predator child classes to registry
+    manager.class_objects_registry["Solid"] = Solid
+
+    # Split by mode
+    if args.mode == 'run':
+        return setup_run(args, manager)
+    elif args.mode == 'load':
+        return manager
+
+def setup_run(args, manager):
+    # ---- VALIDATE ARGS ----
+    if not len(args.nums) == 1:
+        raise SimulationEngineInputError("(-n, --nums) Please supply 1 argument only for population when using springs simulation type")
+    
+    # Set Particle geometry attributes
+    Particle.env_x_lim = 100
+    Particle.env_y_lim = 100
+    Particle.track_com = True
+    Particle.torus = False
+
+    # Initialise particles - could hide this in Particle but nice to be explicit
+    for i in range(args.nums[0]):
+        Solid()
+
+    if not manager.state["Particle"].get("Solid", None):
+        print("No spring particles survived after initialisation. Please add more or change spring length!")
+        exit()
+    return manager
+
+def draw_backdrop_plt(ax):
+    """
+    Get an ax from manager, and plot things on it related to this mode
+    Overrides Manager.default_draw_backdrop_plt
+
+    Args:
+        ax (plt.Axes): Main matplotlib frame
+    """
+    # Set padded limits
+    ax.set_xlim(-1, Particle.env_x_lim+1)
+    ax.set_ylim(-1, Particle.env_y_lim+1)
+
+    # Black background
+    ax.set_facecolor('white')
 
 class Solid(Particle):
     '''
@@ -21,16 +88,16 @@ class Solid(Particle):
 
     
     # Initialisation
-    def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, id=None, loading=False) -> None:
+    def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, unlinked=None) -> None:
         '''
         Initialises a solid object, inheriting from the Particle class.
         '''
-        super().__init__(position, velocity,id)
+        super().__init__(position, velocity, unlinked)
 
         self.mass = 1
 
         self.connected_list = []
-        if not loading:
+        if not unlinked:
             # Upon initialising new solid, check for points nearby
             # Loop through other existing solids
             for other in Solid.iterate_class_instances():
@@ -40,6 +107,7 @@ class Solid(Particle):
                     # Check distance is close enough to self
                     if self.dist(other) < Solid.spring_length * 1.2:
                         # Form link between self, other, check its not already in links_dict
+                        # TODO: Try sort list?
                         link = [self.id, other.id]
                         link_is_new = True
                         for key, val in Solid.links_dict.items():
@@ -59,17 +127,7 @@ class Solid(Particle):
                             # The loading stage rereads the connections, but nothing stops other random ghost prototype
                             # particles making false connections and smearing them on existing ones
                             other.connected_list += [self.id]
-                        
-
-
-        # Ensure prototype for child class exists, callable by its name as a string only
-        prototype = copy.copy(self)
-        Particle.prototypes[self.__class__.__name__] = prototype
-
-    def create_instance(self,id):
-        ''' Used to create instance of the same class as self, without referencing class. '''
-        return Solid(id=id, loading=True)
-
+            
     # -------------------------------------------------------------------------
     # Main force model
     
@@ -78,7 +136,7 @@ class Solid(Particle):
         Calculates main acceleration term from force-based model of environment.
         '''
         # On first timestep, if solid is not connected to others, kill it
-        if Particle.current_step == 0 and self.connected_list == []:
+        if self.manager.current_step == 0 and self.connected_list == []:
             self.unalive()
             
         # Instantiate force term
@@ -104,7 +162,7 @@ class Solid(Particle):
             force_term += -extension * Solid.spring_constant * dirn
 
         # Damping force to avoid constant oscillation
-        force_term += -self.velocity * Solid.damping_constant
+        force_term += -self.velocity * self.damping_constant
         
         # Random force - stochastic noise
         # Generate between [0,1], map to [0,2] then shift to [-1,1]
@@ -158,48 +216,111 @@ class Solid(Particle):
         # Update idx shift to next id and return
         return idx_shift+9
     
+    # NDJSON
+    def to_dict(self):
+        new_dict = super().to_dict()
+        new_dict["connected_list"] = self.connected_list
+        return new_dict
+    
+    @classmethod
+    def from_dict(cls, dict):
+        instance = cls(position=np.array(dict["position"]),
+                   velocity=np.array(dict["velocity"]),
+                   unlinked=True)
+        instance.acceleration = np.array(dict["acceleration"])
+        instance.last_position = np.array(dict["last_position"])
+        instance.connected_list = dict["connected_list"]
+        instance.alive = dict["alive"]
+    
      # -------------------------------------------------------------------------
     # Animation utilities
 
-    def instance_plot(self, ax, com=None, scale=None):
+    def draw_plt(self, ax, com=None, scale=None):
         ''' 
         Plots individual Solid particle onto existing axis, and plot its links
         '''
+        # Remove artist from plot if dead
+        if not self.alive:
+            return self.remove_from_plot_plt()
+        
         # Get plot position of self in frame with COM
-        plot_position = self.position
-        size = 12**2 # 15**2
+        plot_position = self.orient_to_com(com, scale)
+        # Set default size
+        size = 10**2 # 15**2
+        if self.track_com:
+            size = np.max([size*Particle.env_x_lim/scale,1])
         default_line_width = 2
-        if (com is not None) and (scale is not None):
-            plot_position = self.orient_to_com(com, scale)
-            size = np.max([size*Particle.walls_x_lim/scale,1])
-        
-        # Plot all links
-        for other_id in self.connected_list:
-            other = Solid.get_instance_by_id(other_id)
-            # Check if link is stressed, colour differently
-            colour = 'k'
-            length = np.sqrt(self.dist(other))
-            if length > Solid.spring_length * 2:
-                colour = 'w'
-            if length > Solid.spring_length * 1.1:
-                colour = 'y'
-            elif length < Solid.spring_length * 0.9:
-                colour = 'r'
-            # Get plot position (changes if COM scaled)
-            other_plot_position = other.position
-            linewidth = default_line_width
-            markersize = 1
-            if (com is not None) and (scale is not None):
-                other_plot_position = other.orient_to_com(com, scale)
-                linewidth = np.max([linewidth*Particle.walls_x_lim/scale,1])
-                markersize = np.max([markersize*Particle.walls_x_lim/scale,1])
-            # Plot link
-            xvals = [plot_position[0], other_plot_position[0]]
-            yvals = [plot_position[1], other_plot_position[1]]
-            ax.plot(xvals, yvals,linestyle=':', marker='o', linewidth=linewidth, markersize=markersize, color=colour, zorder=self.id)
-        
-        # Plot main point on top (use higher zorder)
-        ax.scatter(plot_position[0],plot_position[1],s=size,c='b', zorder=1000+self.id)
 
+        if self.plt_artists is None:
+            self.plt_artists = []
+            # Plot all links
+            for other_id in self.connected_list:
+                other = Solid.get_instance_by_id(other_id)
+                # Check if link is stressed, colour differently
+                colour = 'k'
+                length = np.sqrt(self.dist(other))
+                if length > Solid.spring_length * 2:
+                    colour = 'w'
+                if length > Solid.spring_length * 1.1:
+                    colour = 'y'
+                elif length < Solid.spring_length * 0.9:
+                    colour = 'r'
+                # Get plot position (changes if COM scaled)
+                other_plot_position = other.position
+                linewidth = default_line_width
+                markersize = 1
+                if (com is not None) and (scale is not None):
+                    other_plot_position = other.orient_to_com(com, scale)
+                    linewidth = np.max([linewidth*Particle.env_x_lim/scale,1])
+                    markersize = np.max([markersize*Particle.env_x_lim/scale,1])
+                # Plot link
+                xvals = [plot_position[0], other_plot_position[0]]
+                yvals = [plot_position[1], other_plot_position[1]]
+                self.plt_artists.append(ax.plot(xvals, yvals,linestyle=':',
+                                                marker='o', linewidth=linewidth, 
+                                                markersize=markersize, color=colour,
+                                                zorder=self.id)[0])
+            
+            # Plot main point on top (use higher zorder)
+            self.plt_artists.append(ax.scatter(plot_position[0],plot_position[1],s=size,c='b', zorder=1000+self.id))
 
-   
+        else:
+            # Plot all links
+            for idx, other_id in enumerate(self.connected_list):
+                other = Solid.get_instance_by_id(other_id)
+                # Check if link is stressed, colour differently
+                colour = 'k'
+                length = np.sqrt(self.dist(other))
+                if length > Solid.spring_length * 2:
+                    colour = 'w'
+                if length > Solid.spring_length * 1.1:
+                    colour = 'y'
+                elif length < Solid.spring_length * 0.9:
+                    colour = 'r'
+                # Get plot position (changes if COM scaled)
+                other_plot_position = other.position
+                linewidth = default_line_width
+                markersize = 1
+                if (com is not None) and (scale is not None):
+                    other_plot_position = other.orient_to_com(com, scale)
+                    linewidth = np.max([linewidth*Particle.env_x_lim/scale,1])
+                    markersize = np.max([markersize*Particle.env_x_lim/scale,1])
+                # Plot link
+                xvals = [plot_position[0], other_plot_position[0]]
+                yvals = [plot_position[1], other_plot_position[1]]
+                self.plt_artists[idx].set_data(xvals, yvals)
+                self.plt_artists[idx].set_color(colour)
+                self.plt_artists[idx].set_markersize(markersize)
+            
+            # Plot main point on top (use higher zorder)
+            self.plt_artists[-1].set_offsets(plot_position)
+            self.plt_artists[-1].set_sizes([size])
+        
+        return self.plt_artists
+'''
+TODO:
+
+make connected list a dict with {id:Solid}
+Plot positions need to be reframed as list of plt_artists
+Otherwise this should be good to go, try run tests after!
+'''
