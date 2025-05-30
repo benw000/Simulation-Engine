@@ -1,8 +1,7 @@
-import copy
 import numpy as np
 
 from simulation_engine.utils.errors import SimulationEngineInputError
-from .parents import Particle, Environment
+from .parents import Particle
 from simulation_engine.utils.manager import Manager
 
 # =====================================================================================
@@ -93,41 +92,26 @@ class Solid(Particle):
         Initialises a solid object, inheriting from the Particle class.
         '''
         super().__init__(position, velocity, unlinked)
-
         self.mass = 1
-
         self.connected_list = []
+        # Upon initialising new solid, link to points nearby
         if not unlinked:
-            # Upon initialising new solid, check for points nearby
-            # Loop through other existing solids
             for other in Solid.iterate_class_instances():
                 if other is self:
-                    pass
-                else:
-                    # Check distance is close enough to self
-                    if self.dist(other) < Solid.spring_length * 1.2:
-                        # Form link between self, other, check its not already in links_dict
-                        # TODO: Try sort list?
-                        link = [self.id, other.id]
-                        link_is_new = True
-                        for key, val in Solid.links_dict.items():
-                            invert_val = [val[1],val[0]]
-                            if link == val or link == invert_val:
-                                link_is_new = False
-                        if link_is_new:
-                            # Update count, add to global dict
-                            Solid.links_count += 1
-                            Solid.links_dict[Solid.links_count] = link
-                            # Update list of connected
-                            self.connected_list += [other.id]
-                            # Problem - when loading, new instance is created with random position but the correct id.
-                            # It then falsely makes connections with other existing particles.
-                            # It adds these connections to its own list, but also to the lists of existing particles
-                            # which have already been loaded in and reread their connections.
-                            # The loading stage rereads the connections, but nothing stops other random ghost prototype
-                            # particles making false connections and smearing them on existing ones
-                            other.connected_list += [self.id]
-            
+                    continue
+                # Check distance is close enough to self
+                if self.dist(other) < self.spring_length * 1.2:
+                    # Form link between self, other, check its not already in links_dict
+                    link = sorted([self.id, other.id]) # Sort to make link unique
+                    if link in Solid.links_dict.values():
+                        continue
+                    # Update count, add to global dict
+                    Solid.links_count += 1
+                    Solid.links_dict[Solid.links_count] = link
+                    # Update lists
+                    self.connected_list += [other.id]
+                    other.connected_list += [self.id]
+        
     # -------------------------------------------------------------------------
     # Main force model
     
@@ -143,16 +127,6 @@ class Solid(Particle):
         force_term = np.zeros(2)
 
         # Spring force from links
-        '''
-        for link_id, link in self.my_links.items():
-            # Unpack link, other is the id that doesnt match self
-            if link[0] == self.id:
-                other = Solid.get_instance_by_id(link[1])
-            elif link[1] == self.id:
-                other = Solid.get_instance_by_id(link[0])
-            else:
-                raise ValueError(f"Link {link_id} ({link}) doesn't involve solid with id {self.id} despite being in its my_links dictionary.")
-        '''
         for other_id in self.connected_list:
             other = Solid.get_instance_by_id(other_id)
             # Get dist^2 and direction to other
@@ -176,45 +150,46 @@ class Solid(Particle):
     # -------------------------------------------------------------------------
     # CSV utilities
 
-    def write_csv_list(self):
-        '''
-        Format for compressing each Solid instance into CSV.
-        '''
-        # Individual child instance info
-        rest = ['*', self.position[0], self.position[1], \
-                self.last_position[0],self.last_position[1],
-                self.velocity[0], self.velocity[1],
-                self.acceleration[0], self.acceleration[1] ]
-        # Add connected links after id and before rest
-        return [self.id, '*'] + self.connected_list + rest
+    # TODO: Move to legacy script
+    # def write_csv_list(self):
+    #     '''
+    #     Format for compressing each Solid instance into CSV.
+    #     '''
+    #     # Individual child instance info
+    #     rest = ['*', self.position[0], self.position[1], \
+    #             self.last_position[0],self.last_position[1],
+    #             self.velocity[0], self.velocity[1],
+    #             self.acceleration[0], self.acceleration[1] ]
+    #     # Add connected links after id and before rest
+    #     return [self.id, '*'] + self.connected_list + rest
 
-    def read_csv_list(self, system_state_list, idx_shift):
-        '''
-        Format for parsing the compressed Solid instances from CSV.
-        '''
-        # Pass over starting '*'
-        idx_shift += 2
+    # def read_csv_list(self, system_state_list, idx_shift):
+    #     '''
+    #     Format for parsing the compressed Solid instances from CSV.
+    #     '''
+    #     # Pass over starting '*'
+    #     idx_shift += 2
 
-        # Iterate through connected list
-        self.connected_list = []
-        while True:
-            if system_state_list[idx_shift] == '*':
-                break
-            self.connected_list += [int(system_state_list[idx_shift])]
-            idx_shift += 1
+    #     # Iterate through connected list
+    #     self.connected_list = []
+    #     while True:
+    #         if system_state_list[idx_shift] == '*':
+    #             break
+    #         self.connected_list += [int(system_state_list[idx_shift])]
+    #         idx_shift += 1
 
-        # Read the rest idx_shift = 0 corresponds to '*'
-        self.position = np.array([float(system_state_list[idx_shift+1]), \
-                                    float(system_state_list[idx_shift+2])])
-        self.last_position = np.array([float(system_state_list[idx_shift+3]), \
-                                    float(system_state_list[idx_shift+4])])
-        self.velocity = np.array([float(system_state_list[idx_shift+5]), \
-                                    float(system_state_list[idx_shift+6])])
-        self.acceleration = np.array([float(system_state_list[idx_shift+7]), \
-                                    float(system_state_list[idx_shift+8])])
+    #     # Read the rest idx_shift = 0 corresponds to '*'
+    #     self.position = np.array([float(system_state_list[idx_shift+1]), \
+    #                                 float(system_state_list[idx_shift+2])])
+    #     self.last_position = np.array([float(system_state_list[idx_shift+3]), \
+    #                                 float(system_state_list[idx_shift+4])])
+    #     self.velocity = np.array([float(system_state_list[idx_shift+5]), \
+    #                                 float(system_state_list[idx_shift+6])])
+    #     self.acceleration = np.array([float(system_state_list[idx_shift+7]), \
+    #                                 float(system_state_list[idx_shift+8])])
         
-        # Update idx shift to next id and return
-        return idx_shift+9
+    #     # Update idx shift to next id and return
+    #     return idx_shift+9
     
     # NDJSON
     def to_dict(self):
@@ -317,10 +292,3 @@ class Solid(Particle):
             self.plt_artists[-1].set_sizes([size])
         
         return self.plt_artists
-'''
-TODO:
-
-make connected list a dict with {id:Solid}
-Plot positions need to be reframed as list of plt_artists
-Otherwise this should be good to go, try run tests after!
-'''
