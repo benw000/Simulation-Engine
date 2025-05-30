@@ -99,16 +99,6 @@ class Particle:
     # TODO: Make these hidden and move to Manager when possible
 
     @classmethod
-    def get_count(cls):
-        ''' Return a class type count. eg  num_birds = Bird.get_count(). '''
-        return len(cls.manager.state["Particle"].get(cls.__name__, {}).keys())
-    
-    @classmethod
-    def get_max_id(cls):
-        ''' Return a class max id. eg max_id_birds = Bird.get_max_id(). '''
-        return cls.manager.max_ids_dict.get(cls.__name__, 0)
-    
-    @classmethod
     def get_instance_by_id(cls, id):
         ''' Get class instance by its id. If id doesn't exist, throw a KeyError.'''
         existing_class_ids = cls.manager.state["Particle"].get(cls.__name__, {}).keys()
