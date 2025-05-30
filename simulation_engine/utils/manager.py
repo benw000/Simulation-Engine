@@ -1,3 +1,4 @@
+import cv2
 import json
 import argparse
 from pathlib import Path
@@ -28,6 +29,7 @@ class Manager:
                  args:argparse.Namespace,
                  show_graph:bool = False,
                  draw_backdrop_plt_func = None,
+                 draw_graph_plt_func = None,
                  ):
         """
         Initialise a Manager object to oversee the timestepping and state storing
@@ -63,7 +65,10 @@ class Manager:
 
         # Time
         self.num_steps: int = args.steps
-        self.delta_t: float = args.deltat
+        if args.deltat is None:
+            self.deltat = 0.01
+        else:
+            self.delta_t: float = args.deltat
         self.current_time = 0
         self.current_step = 0
         self.done_computing = False
@@ -115,11 +120,26 @@ class Manager:
         self.show_graph = show_graph
         if draw_backdrop_plt_func:
             self.draw_backdrop_plt_func = draw_backdrop_plt_func
+        if draw_graph_plt_func:
+            self.draw_graph_plt_func = draw_graph_plt_func
 
 
     # =============================================================
 
     # ---- UTILITIES ---- 
+    def iterate_all_alive_particles(self):
+        """
+        Generator to yield all alive particles.
+
+        Yields:
+            Particle: Different instances of child classes of Particle
+        """
+        for class_name, class_dict in self.state["Particle"].items():
+            # TODO: Does list() change anything here?
+            for particle in list(class_dict.values()):
+                if particle.alive:
+                    yield particle
+    
     def iterate_all_particles(self):
         """
         Generator to yield all particles.
@@ -128,9 +148,9 @@ class Manager:
             Particle: Different instances of child classes of Particle
         """
         for class_name, class_dict in self.state["Particle"].items():
-            for id, particle in class_dict.items():
-                if particle.alive:
-                    yield particle
+            # TODO: Does list() change anything here?
+            for particle in list(class_dict.values()):
+                yield particle
 
     def rich_progress(self, iterable, description: str = "Working"):
         """
@@ -220,20 +240,27 @@ class Manager:
         Args:
             new_state (dict): Nested state dictionary
         """
-        for key, val in self.state.items():
-            if key in ["Particle", "Environment"]:
-                if key == "Particle":
-                    for child_class_name, child_class_dict in val.items():
-                        for id, child in child_class_dict.items():
-                            new_object = new_state[key][child_class_name][id]
-                            child.copy_state(new_object)
-                elif key == "Environment":
-                    for child_class_name, child_class_list in val.items():
-                        for idx, child in enumerate(child_class_list):
-                            new_object = new_state[key][child_class_name][idx]
-                            child.copy_state(new_object)
-    
+        for key, val in new_state.items():
+            if key == "Particle": # Uses dict
+                for child_class_name, child_class_dict in val.items():
+                    existing_child_class_dict = self.state[key][child_class_name]
+                    for id, child in child_class_dict.items():
+                        # Use copy_state to update if ID exists, otherwise deepcopy
+                        if id in existing_child_class_dict.keys():
+                            existing_child_class_dict[id].copy_state(child)
+                        else:
+                            self.state[key][child_class_name][id] = deepcopy(child)
+                    # Remove remaining existing IDs if they dont appear
+                    for id in existing_child_class_dict.keys():
+                        if id not in child_class_dict.keys():
+                            self.state[key][child_class_name].pop(id)
 
+            elif key == "Environment": # Uses list
+                for child_class_name, child_class_list in val.items():
+                    # TODO: We assume number of Environment objects is static!
+                    for index, child in enumerate(child_class_list):
+                        existing_child_class_list = self.state[key][child_class_name]
+                        existing_child_class_list[index].copy_state(child)
     # =============================================================
 
     # ---- MAIN PIPELINE OPERATIONS ----
@@ -260,6 +287,8 @@ class Manager:
             self.history.append(deepcopy(self.state))
         if self.write_log:
             self.logger.append_current_state(self.state)
+        # print("Starting state")
+        # print(self.state)
 
         # 1. Compute first if asynchronous
         if not self.sync_compute_and_rendering:
@@ -270,8 +299,11 @@ class Manager:
             print("[cyan]Finished Computing![/cyan] 🥸")
             print("")
             # Reset to first step's state
+            self.copy_state(self.get_state_at_timestep(0))
             self.current_time = 0
             self.current_step = 0 # -1
+            # print("Re-reading first state")
+            # print(self.state)
         
         # 2. Split by rendering framework
         if self.render_framework == "matplotlib":
@@ -289,7 +321,7 @@ class Manager:
         self.state = self.get_state_at_timestep(1)
         # Get number of lines as num steps
         self.num_steps = len(self.logger.offset_indices) - 1
-        
+
         # 2. Split by rendering framework
         if self.render_framework == "matplotlib":
             self.animate_plt()
@@ -305,14 +337,14 @@ class Manager:
         - Optionally writes state dict to NDJSON log
         """
         # Update all particles
-        for particle in self.iterate_all_particles():
+        for particle in self.iterate_all_alive_particles():
             particle.update()
 
         # Increment time
         self.current_time += self.delta_t
         self.current_step += 1
 
-        # TODO: Update kill records?
+        # TODO: Update kill records - would need to do from particle child 
 
         # Store state in history
         if self.cache_history:
@@ -345,6 +377,7 @@ class Manager:
         interval_between_frames = self.delta_t*1000 # milliseconds
         # Wrap the frames iterator in a custom rich progress bar
         frames_iterator = self.rich_progress(range(self.num_steps),description="[bold]Rendering Progress[/bold]")
+        #frames_iterator = range(self.num_steps)
         # Tried blit=True with returned artists collected recursively by draw_figure_plt, couldn't get working.
         blit = False
         # Create a zero-argument init_func inside a scope that can see our desired arguments
@@ -356,24 +389,26 @@ class Manager:
                             frames=frames_iterator,
                             fargs=([ax],[ax2]), 
                             interval=interval_between_frames,
-                            repeat=True,
+                            repeat=not self.save_video,
                             cache_frame_data=self.cache_history,
                             blit=blit)
         
-        print("Now rendering frames for each time step - [italic]not displaying real time[/italic]")
-        print("")
-
-        # 3. Optionally save video
+        # 3. Split based on save video
         if self.save_video:
+            print("Now rendering simulation frame by frame")
             # Make sure parent path exists
             self.vid_path.parent.mkdir(parents=True, exist_ok=True)
             fps = 1/self.delta_t # period -> frequency
             animation.save(self.vid_path.absolute().as_posix(), writer='ffmpeg', fps=fps)
             print("\n")
             print(f"Saved simulation as mp4 at {self.vid_path}.")
-        
-        # 4. Play video on loop
-        plt.show()
+            # Display video
+            self.display_rendered_video()
+        else:
+            print("Now rendering frames for each time step - [italic]not displaying real time[/italic]")
+            print("")
+            # 4. Play video on loop
+            plt.show()            
 
     # ---- FIGURE SETUP ----
     def setup_figure_plt(self):
@@ -608,8 +643,12 @@ class Manager:
             window_title = normal_title
         else:
             window_title = render_title
-        fig = ax.get_figure()
-        fig.canvas.manager.set_window_title(window_title)
+        # Try setting figure title
+        try:
+            fig = ax.get_figure()
+            fig.canvas.manager.set_window_title(window_title)
+        except:
+            pass
         ax.set_title(normal_title)
 
         # 2. Decide if tracking the COM in each frame
@@ -678,7 +717,7 @@ class Manager:
         artists = []
         for particle in self.iterate_all_particles():
             artists += particle.draw_plt(ax, com,scene_scale)
-        return artists
+        return []
     
     # ---- DRAW GRAPH ----
     def draw_graph_plt(self, ax2:plt.Axes):
@@ -713,6 +752,37 @@ class Manager:
     
     draw_graph_plt_func = _default_draw_graph_plt
 
+    # ------------------------------------------------
+
+    def display_rendered_video(self):
+        # Set up a cv2 video capture instance from video path
+        cap = cv2.VideoCapture(self.vid_path)
+        # Check opened
+        if not cap.isOpened():
+            print(f"Error: Could not open rendered video at {self.vid_path}.")
+            exit()
+        # Create a named window (optional: make resizable)
+        window_title = f"Simulation Engine [{self.simulation_type}] | {self.vid_path}"
+        cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
+
+        # Main listening loop
+        while True:
+            # Read next frame
+            ret, frame = cap.read()
+            if not ret:
+                # Restart video from the beginning
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                continue
+            # Show frame as image in window
+            cv2.imshow(window_title, frame)
+
+            # Press 'q' to quit early
+            if cv2.waitKey(30) & 0xFF == ord('q'):
+                break
+        
+        # Safely quit
+        cap.release()
+        cv2.destroyAllWindows()
 
 # ------------------------------------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------------------------------------------------
@@ -765,18 +835,17 @@ class Logger:
         new_dict = {}
         for key, val in state.items():
             # Create nested dict for Particle and Environment using .to_dict() methods
-            if key in ["Particle", "Environment"]:
-                new_dict[key] = {}
-                if key == "Particle":
-                    for child_class_name, child_class_dict in val.items():
-                        new_dict[key][child_class_name] = {}
-                        for id, child in child_class_dict.items():
-                            new_dict[key][child_class_name][id] = child.to_dict()
-                elif key == "Environment":
-                    for child_class_name, child_class_list in val.items():
-                        new_dict[key][child_class_name] = []
-                        for child in child_class_list:
-                            new_dict[key][child_class_name].append(child.to_dict())
+            new_dict[key] = {}
+            if key == "Particle":
+                for child_class_name, child_class_dict in val.items():
+                    new_dict[key][child_class_name] = {}
+                    for id, child in child_class_dict.items():
+                        new_dict[key][child_class_name][id] = child.to_dict()
+            elif key == "Environment":
+                for child_class_name, child_class_list in val.items():
+                    new_dict[key][child_class_name] = []
+                    for child in child_class_list:
+                        new_dict[key][child_class_name].append(child.to_dict())
             # Assuming all other keys are simple
             else:
                 new_dict[key]=val
@@ -797,20 +866,19 @@ class Logger:
         new_state = {}
         for key, val in json_dict.items():
             # Create nested dict for Particle and Environment using .to_dict() methods
-            if key in ["Particle", "Environment"]:
-                new_state[key] = {}
-                if key == "Particle":
-                    for child_class_name, child_class_dict in val.items():
-                        child_class = self.manager.class_objects_registry[child_class_name]
-                        new_state[key][child_class_name] = {}
-                        for id, child_dict in child_class_dict.items():
-                            new_state[key][child_class_name][int(id)] = child_class.from_dict(child_dict)
-                elif key == "Environment":
-                    for child_class_name, child_class_list in val.items():
-                        child_class = self.manager.class_objects_registry[child_class_name]
-                        new_state[key][child_class_name] = []
-                        for child_dict in child_class_list:
-                            new_state[key][child_class_name].append(child_class.from_dict(child_dict))
+            new_state[key] = {}
+            if key == "Particle":
+                for child_class_name, child_class_dict in val.items():
+                    child_class = self.manager.class_objects_registry[child_class_name]
+                    new_state[key][child_class_name] = {}
+                    for id, child_dict in child_class_dict.items():
+                        new_state[key][child_class_name][int(id)] = child_class.from_dict(child_dict)
+            elif key == "Environment":
+                for child_class_name, child_class_list in val.items():
+                    child_class = self.manager.class_objects_registry[child_class_name]
+                    new_state[key][child_class_name] = []
+                    for child_dict in child_class_list:
+                        new_state[key][child_class_name].append(child_class.from_dict(child_dict))
             # Assuming all other keys are simple
             else:
                 new_state[key]=val
