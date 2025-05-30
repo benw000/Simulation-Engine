@@ -1,7 +1,4 @@
-import copy
 import numpy as np
-from matplotlib.patches import Polygon
-from matplotlib.transforms import Affine2D
 
 from simulation_engine.utils.errors import SimulationEngineInputError
 from .parents import Particle, Environment
@@ -31,7 +28,7 @@ def setup(args):
     if args.mode == 'run':
         return setup_run(args, manager)
     elif args.mode == 'load':
-        return setup_load(args, manager)
+        return manager
 
 def setup_run(args, manager):
     # ---- VALIDATE ARGS ----
@@ -39,8 +36,8 @@ def setup_run(args, manager):
         raise SimulationEngineInputError("(-n, --nums) Please supply 2 arguments for population when using birds simulation type")
     
     # Set Particle geometry attributes
-    Particle.env_x_lim = 1000
-    Particle.env_y_lim = 1000
+    Particle.env_x_lim = 100
+    Particle.env_y_lim = 100
     Particle.track_com = False
     Particle.torus = True
 
@@ -51,10 +48,6 @@ def setup_run(args, manager):
     for i in range(num_predators):
         Predator()
 
-    return manager
-
-def setup_load(args, manager):
-    # Not sure theres any more to do
     return manager
 
 def draw_backdrop_plt(ax):
@@ -78,19 +71,20 @@ class Prey(Particle):
     Prey particle for flock of birds simulation.
     '''
     # -------------------------------------------------------------------------
-    # Attributes
+    # Force model constants
 
-    prey_dist_thresh = 5**2
+    # Prey-prey repulsion
+    prey_dist_thresh = 10**2
     prey_repulsion_force = 50
-
+    # Predator-prey repulsion
     pred_detect_thresh = 50**2
     pred_repulsion_force = 150
-
-    pred_kill_thresh = 1**2
-
-    com_attraction_force = 150
-
-    random_force = 30
+    # Predator kill thresh
+    pred_kill_thresh = 2**2
+    # Prey COM attraction
+    com_attraction_force = 75
+    # Random motion
+    random_force = 50
     
     # Initialisation
     def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, unlinked=None) -> None:
@@ -102,9 +96,6 @@ class Prey(Particle):
         # Prey specific attributes
         self.mass = 0.5
         self.max_speed = 20
-
-        # Initialise more
-        self.polygon = None
 
     # -------------------------------------------------------------------------
     # Distance utilities
@@ -129,36 +120,38 @@ class Prey(Particle):
     def update_acceleration(self):
         '''
         Calculates main acceleration term from force-based model of environment.
+
+        1. If prey is near enough to closest predator, kill it and return early
+        2. Prey repulsion force within radius - scales with 1/d^2
+        3. Predator repulsion force within detection thresh - scales with 1/d
         '''
-        # If predator near enough to kill prey instance, unalive prey and skip
+        # 1. If predator near enough to kill prey instance, unalive prey and skip
         closest_pred = self.find_closest_pred()
         if closest_pred is not None:
             if self.dist(closest_pred) < self.pred_kill_thresh:
                 self.unalive()
-                # print(Particle.all)
                 return 1
         
         # Instantiate force term
         force_term = np.zeros(2)
 
-        # Prey repulsion force - currently scales with 1/d
+        # 2. Prey repulsion force - currently scales with 1/d^2
         for bird in Prey.iterate_class_instances():
-            if bird.id == self.id:
+            if bird is self:
                 continue
-            elif self.dist(bird) < Prey.prey_dist_thresh:
-                force_term += - self.unit_dirn(bird)*(self.prey_repulsion_force/(np.sqrt(self.dist(bird))))
+            elif self.dist(bird) < self.prey_dist_thresh:
+                force_term += - self.unit_dirn(bird)*(self.prey_repulsion_force/self.dist(bird))
             else:
                 continue
 
-        # Predator repulsion force
+        # 3. Predator repulsion force - currently scales with 1/d
         for bird in Predator.iterate_class_instances():
-            if self.dist(bird) < Prey.pred_detect_thresh:
+            if self.dist(bird) < self.pred_detect_thresh:
                 force_term += - self.unit_dirn(bird)*(self.pred_repulsion_force/(np.sqrt(self.dist(bird))))
             else:
                 continue
 
-    
-        # Attraction to COM of prey
+        # 4. Attraction to COM of prey
         com = Prey.centre_of_mass_class()
         attract_dist = np.sum((com - self.position)**2)
         force_term += (com - self.position)*(self.com_attraction_force/(attract_dist))
@@ -217,82 +210,38 @@ class Prey(Particle):
         instance.last_position = np.array(dict["last_position"])
         instance.mass = dict["mass"]
         instance.max_speed = dict["max_speed"]
+        instance.alive = dict["alive"]
 
         return instance
 
     # -------------------------------------------------------------------------
     # Animation utilities
-
-    @staticmethod
-    def create_irregular_triangle(angle_rad):
-        '''
-        Create irregular triangle marker for plotting instances.
-        '''
-        # Define vertices for an irregular triangle (relative to origin)
-        triangle = np.array([[-0.5, -1], [0.5, -1], [0.0, 1]])
-        # Create a rotation matrix
-        rotation_matrix = np.array([[np.cos(angle_rad), -np.sin(angle_rad)],
-                                    [np.sin(angle_rad),  np.cos(angle_rad)]])
-        # Apply the rotation to the triangle vertices
-        return triangle @ rotation_matrix.T
     
     def draw_plt(self, ax, com=None, scale=None):
-        ''' 
-        Plots individual Prey particle onto existing axis. 
-        '''
-        # Get plot position in frame
-        plot_position = self.position
-        if (com is not None) and (scale is not None):
-            plot_position = self.orient_to_com(com, scale)
-
-        # Update artist with PathCollection.set_offsets setter method
-        if self.polygon is None:
-            # Create a Polygon patch to represent the irregular triangle
-            triangle_shape = Prey.create_irregular_triangle(self.theta)
-            self.polygon = Polygon(triangle_shape, closed=True, facecolor='white', edgecolor='black')
-            
-            # Create and apply transformation of the polygon to the point
-            t = Affine2D().scale(20).translate(plot_position[0], plot_position[1]) + ax.transData
-            self.polygon.set_transform(t)
-            ax.add_patch(self.polygon)
+        facecolor = 'white'
+        plot_scale = 1.5
+        return self.plot_as_triangle_plt(ax, com, scale, facecolor, plot_scale)
         
-        else:
-            # Recompute orientation
-            triangle_shape = Prey.create_irregular_triangle(self.theta)
-
-            # Update shape and transform
-            self.polygon.set_xy(triangle_shape)
-            t = Affine2D().scale(20).translate(self.position[0], self.position[1]) + ax.transData
-            self.polygon.set_transform(t)
-                
-        return [self.polygon]
-        
-
-
-
-
-# ------------------------------------------------------------------------------------------------------------------------
-
-
-
 
 class Predator(Particle):
     '''
     Predator particle for flock of birds simulation.
     '''
     # -------------------------------------------------------------------------
-    # Attributes
-
-    prediction = True
-
+    # Force model
+    
+    # Attraction to prey
     prey_attraction_force = 100
-
-    pred_repulsion_force = 200
-    pred_dist_thresh = 10**2
-
+    # Predator-Predator repulsion
+    pred_repulsion_force = 100
+    pred_dist_thresh = 100**2
+    # Prey kill threshold
     pred_kill_thresh = 1**2
-
+    # Random motion
     random_force = 5
+
+    # Aim in the direction of extrapolated velocity
+    prediction = True
     
     # Initialisation
     def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, unlinked=False) -> None:
@@ -304,8 +253,6 @@ class Predator(Particle):
         # Predator specific attributes
         self.mass = 0.5
         self.max_speed = 30
-
-        self.polygon = None
 
     # -------------------------------------------------------------------------
     # Utilities
@@ -332,7 +279,7 @@ class Predator(Particle):
         Calculates main acceleration term from force-based model of environment.
         '''
 
-        # If near enough to kill prey instance, set acc and vel to 0
+        # If near enough to kill prey instance, set acc to 0 and vel to low
         closest_bird = self.find_closest_prey()
         if closest_bird is not None:
             if self.dist(closest_bird) < self.pred_kill_thresh:
@@ -346,7 +293,7 @@ class Predator(Particle):
 
         # Predator repulsion force - currently scales with 1/d
         for bird in Predator.iterate_class_instances():
-            if bird.id == self.id:
+            if bird is self:
                 continue
             elif self.dist(bird) < Predator.pred_dist_thresh:
                 force_term += - self.unit_dirn(bird)*(self.pred_repulsion_force/(np.sqrt(self.dist(bird))))
@@ -377,8 +324,6 @@ class Predator(Particle):
         self.acceleration = force_term / self.mass
 
         return 0
-
-    
     
     # -------------------------------------------------------------------------
     # CSV utilities
@@ -429,36 +374,34 @@ class Predator(Particle):
 
     # -------------------------------------------------------------------------
     # Animation utilities
-
     def draw_plt(self, ax, com=None, scale=None):
-        ''' 
-        Plots individual Predator particle onto existing axis. 
-        '''
-        # Get plot position in frame
-        plot_position = self.position
-        if (com is not None) and (scale is not None):
-            plot_position = self.orient_to_com(com, scale)
-
-        # Update artist with PathCollection.set_offsets setter method
-        if self.polygon is None:
-            # Create a Polygon patch to represent the irregular triangle
-            triangle_shape = Prey.create_irregular_triangle(self.theta)
-            self.polygon = Polygon(triangle_shape, closed=True, facecolor='red', edgecolor='black')
-            
-            # Create and apply transformation of the polygon to the point
-            t = Affine2D().scale(20).translate(plot_position[0], plot_position[1]) + ax.transData
-            self.polygon.set_transform(t)
-            ax.add_patch(self.polygon)
-        
-        else:
-            # Recompute orientation
-            triangle_shape = Prey.create_irregular_triangle(self.theta)
-
-            # Update shape and transform
-            self.polygon.set_xy(triangle_shape)
-            t = Affine2D().scale(20).translate(self.position[0], self.position[1]) + ax.transData
-            self.polygon.set_transform(t)
-                
-        return [self.polygon]
+        facecolor = 'red'
+        plot_scale = 2
+        return self.plot_as_triangle_plt(ax, com, scale, facecolor, plot_scale)
 
 
+'''
+TODO:
+Use debugger mode in informed way
+
+
+Not a lot of code - consider rewriting from scratch!
+- Eating doesnt work - somehow the prey arent removed or garbage collected
+- Both predator and prey behaviour is weird, they barely move
+- Prey seem still
+Go through and clear up logic
+see if its an issue with collecting artists which matplotlib keeps?
+
+Main bug:
+- Particles that get killed are actually never showing up in the first place!
+
+
+
+
+
+Now:
+Look at printed state dicts
+When it re-reads it thinks the particle is dead
+Need to properly sort this out, the whole dead/alive tracking is completely defunct
+Find all instances of tracking, rip it out and start again
+'''

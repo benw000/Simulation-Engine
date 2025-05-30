@@ -2,6 +2,8 @@ import os
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
+from matplotlib.transforms import Affine2D
 from rich import print
 
 
@@ -73,6 +75,9 @@ class Particle:
         self.max_speed = None
         self.just_reflected = False
 
+        # Matplotlib artists
+        self.plt_artists = None
+
     def _initialise_instance_id(self):
         # Get Child class name of current instance
         class_name = self.__class__.__name__
@@ -120,24 +125,28 @@ class Particle:
         self.alive = False
 
         # Remove from manager
-        self.manager.state["Particle"][self.__class__.__name__].remove(self.id)
+        #self.manager.state["Particle"][self.__class__.__name__].pop(self.id)
 
     @classmethod
     def iterate_class_instances(cls):
-        ''' Iterate over all instances of a given class by id. '''
-        # This function is a 'generator' object in Python due to the use of 'yield'.
-        # It unpacks each {id: instance} dictionary item within our Particle.all[classname] dictionary
-        # It then 'yields' the instance. Can be used in a for loop as iterator.
-        for instance in cls.manager.state["Particle"].get(cls.__name__, {}).values():
-            if instance.alive == 1:
-                yield instance
+        """
+        Generator to yield all particles of a certain child class.
+
+        Yields:
+            cls(Particle): All instances of cls
+        """
+        class_dict = cls.manager.state["Particle"].get(cls.__name__, {})
+        # TODO: Does list() change anything here?
+        for particle in list(class_dict.values()):
+            if particle.alive:
+                yield particle
 
     def copy_state(self, new_object):
-
         self.position = new_object.position
         self.velocity = new_object.velocity
         self.acceleration = new_object.acceleration
         self.last_position = new_object.last_position
+        self.alive = new_object.alive
     
     # -------------------------------------------------------------------------
     # Dunder
@@ -226,45 +235,84 @@ class Particle:
         y = y % Particle.env_y_lim
         self.position = np.array([x,y])
 
+    @staticmethod
+    def torus_1d_com(positions, masses, domain_length):
+        """
+        Get the centre of mass of an array of 1d positions and masses,
+        over a 1D circular domain with domain_length
+
+        - We map 1D domain (segment of R^1) to complex unit circle S^1 
+        - We then average the new complex coords weighted by their masses
+        - We finally map from complex coord's angle back to a point in the 1D domain
+
+        Args:
+            positions (np.array, 1d): Array of particle positions along 1 coordinate
+            masses (np.array, 1d): Corresponding array of particle masses
+            domain_length (float | int): The length of the coordinate domain (usually Particle.env_x_lim)
+
+        Returns:
+            float: Centre of mass along the 1D domain
+        """
+        # Convert positions to angles in [0,2pi]
+        angles = positions * 2*np.pi/domain_length
+        # Compute complex coordinates on unit circle S^1
+        coords = np.exp(1j * angles)
+        # Element-wise multiply mass by complex coord
+        weighted_coords = np.multiply(masses, coords)
+        # Sum complex coords over row axis, divide by total mass
+        com = np.sum(weighted_coords, axis=0) / np.sum(masses)
+        # Get com angle, map back to modulo [0,2pi]
+        com_angle = np.angle(com) % (2*np.pi)
+        # Map from angle back to 1D domain
+        com_1d = com_angle * domain_length / (2*np.pi)
+        return com_1d
+        
+
+    @staticmethod
+    def centre_of_mass_calc(iterable):
+        # Get masses and coordinates as arrays
+        masses = []
+        positions = []
+        for instance in iterable():
+            masses.append(instance.mass)
+            positions.append(instance.position) # np.array (2,)
+        masses = np.array(masses)
+        positions = np.array(positions) # np.array (iter_length, 2)
+
+        # Compute COM based on space
+        if Particle.torus:
+            # We treat X and Y coords independently
+            x_com = Particle.torus_1d_com(positions[:,0], masses, Particle.env_x_lim)
+            y_com = Particle.torus_1d_com(positions[:,1], masses, Particle.env_y_lim)
+            com = np.array([x_com,y_com])
+        else:
+            # Element-wise multiply mass by position
+            weighted_positions = positions
+            weighted_positions[:,0] = weighted_positions[:,0] * masses
+            weighted_positions[:,1] = weighted_positions[:,1] * masses
+            # Sum over row axis, divide by total mass
+            com = np.sum(weighted_positions, axis=0) / np.sum(masses)
+    
+        return com
+
     @classmethod
     def centre_of_mass_class(cls):
-        ''' Compute COM of all particle instances. '''
-        total_mass = 0
-        com = np.zeros(2)
-        # Call generator to run over all particle instances
-        for instance in cls.iterate_class_instances():
-            mass = instance.mass
-            com += mass*instance.position
-            total_mass += mass
-        com *= 1/total_mass
-        return com
-    
+        return Particle.centre_of_mass_calc(cls.iterate_class_instances)
+        
     @staticmethod
     def centre_of_mass():
-        ''' Compute COM of all particle instances. '''
-        total_mass = 0
-        com = np.zeros(2)
-        # Call generator to run over all particle instances
-        for instance in Particle.manager.iterate_all_particles():
-            mass = instance.mass
-            com += mass*instance.position
-            total_mass += mass
-        com *= 1/total_mass
-        return com
+        return Particle.centre_of_mass_calc(Particle.manager.iterate_all_alive_particles)
 
     @staticmethod
     def scene_scale():
         ''' Compute the maximum x or y distance a particle has from the COM. '''
         com = Particle.centre_of_mass()
-        max_dist = 0.01
         # Call generator to find max dist from COM
-        for instance in Particle.manager.iterate_all_particles():
-            vec_from_com = instance.position - com
-            for i in vec_from_com:
-                if i > max_dist:
-                    max_dist = i
-                else:
-                    pass
+        all_dists = []
+        for instance in Particle.manager.iterate_all_alive_particles():
+            all_dists.append((instance.position - com).tolist())
+        max_dist = np.max(all_dists)
+
         return max_dist
      
     def orient_to_com(self, com, scale):
@@ -275,7 +323,7 @@ class Particle:
         # Transform
         centre = np.array([0.5*Particle.env_x_lim, 0.5*Particle.env_y_lim])
         term = np.min(centre)
-        return centre + (self.position - com) *0.9*term/scale #* 1/scale
+        return centre + (self.position - com) * 0.8 * term/scale #* 1/scale
     
     def find_closest_target(self):
         # Check through list of targets
@@ -288,6 +336,10 @@ class Particle:
                 closest_dist = dist
                 closest_target = target
         return closest_target
+    
+    @property
+    def theta(self):
+        return np.arctan2(self.velocity[1], self.velocity[0]) - np.pi/2
 
     # -------------------------------------------------------------------------
     # Main timestep function
@@ -337,6 +389,7 @@ class Particle:
             "last_position":self.last_position.tolist(),
             "velocity":self.velocity.tolist(),
             "acceleration":self.acceleration.tolist(),
+            "alive":self.alive
         }
         return new_dict
     # -------------------------------------------------------------------------
@@ -473,6 +526,70 @@ class Particle:
             
             # Move on to next class by shifting over pipe character '|'
             idx_shift += 1
+
+    # ===============================================================
+
+    # MATPLOTLIB
+    def remove_from_plot_plt(self):
+        # Use matplotlib .remove() method which works on all artists
+        try:
+            for artist in self.plt_artists:
+                artist.remove()
+        except Exception as e:
+            # # Debug
+            # print("Error moving particle:",self)
+            # print(e)
+            # print("Plot artists list:", self.plt_artists)
+            pass
+        # Reset artists as None:
+        # Next loop, plt_artists will be reinitialised from None inside plot
+        self.plt_artists = None
+        return []
+
+    @staticmethod
+    def create_triangle_plt(angle_rad):
+        '''
+        Create irregular triangle marker for plotting instances.
+        '''
+        # Define vertices for an irregular triangle (relative to origin)
+        triangle = np.array([[-0.5, -1], [0.5, -1], [0.0, 1]])
+        # Create a rotation matrix
+        rotation_matrix = np.array([[np.cos(angle_rad), -np.sin(angle_rad)],
+                                    [np.sin(angle_rad),  np.cos(angle_rad)]])
+        # Apply the rotation to the triangle vertices
+        return triangle @ rotation_matrix.T
+    
+    def plot_as_triangle_plt(self, ax, com=None, scale=None, facecolor='white', plot_scale=1):
+        ''' Used by birds in Predator Prey simulation '''
+        # Remove artist from plot if dead
+        if not self.alive:
+            return self.remove_from_plot_plt()
+        
+        # Get plot position in frame
+        plot_position = self.orient_to_com(com, scale)
+
+        # Update artist with PathCollection.set_offsets setter method
+        if self.plt_artists is None:
+            # Create a Polygon patch to represent the irregular triangle
+            triangle_shape = self.create_triangle_plt(self.theta)
+            polygon = Polygon(triangle_shape, closed=True, facecolor=facecolor, edgecolor='black')
+            # Create and apply transformation of the polygon to the point
+            t = Affine2D().scale(plot_scale).translate(plot_position[0], plot_position[1]) + ax.transData
+            polygon.set_transform(t)
+
+            # Add to artists and axes
+            self.plt_artists = [polygon]
+            ax.add_patch(polygon)
+        else:
+            # Recompute orientation
+            triangle_shape = self.create_triangle_plt(self.theta)
+
+            # Update shape and transform
+            self.plt_artists[0].set_xy(triangle_shape)
+            t = Affine2D().scale(plot_scale).translate(self.position[0], self.position[1]) + ax.transData
+            self.plt_artists[0].set_transform(t)
+                
+        return self.plt_artists
 
 
 
