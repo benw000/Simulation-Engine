@@ -20,7 +20,7 @@ SETUP_FUNC_DICT = {
     "pool": simulation_engine.classes.pool.setup
 }
 # Track implementations
-IMPLEMENTED_TYPES = ["nbody"]
+IMPLEMENTED_TYPES = ["nbody", "birds", "springs", "pool"]
 INTERACTIVE_SUPPORTED_TYPES = []
 
 # ---- VALIDATION FUNCTIONS ----
@@ -75,9 +75,10 @@ def validate_setup_args(args):
         print(f"Warning: User has set high number of total time steps ({steps})")
     
     # Time step duration
-    deltat = args.steps
-    if deltat <= 0:
-        raise SimulationEngineInputError(f"(-d, --deltat): Please enter a positive (>0) float number for timestep delta t duration (seconds). Got {deltat}")
+    deltat = args.deltat
+    if not deltat is None:
+        if deltat <= 0:
+            raise SimulationEngineInputError(f"(-d, --deltat): Please enter a positive (>0) float number for timestep delta t duration (seconds). Got {deltat}")
     
     # Number of classes - note individual setup function needs to validate length of list
     nums = args.nums
