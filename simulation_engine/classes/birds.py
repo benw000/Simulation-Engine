@@ -308,7 +308,7 @@ class Predator(Particle):
                 target_position = closest_bird.position.copy()
                 target_velocity = closest_bird.velocity
                 # Temporarily change closest bird's position
-                closest_bird.position = target_position + 5*Particle.delta_t*target_velocity
+                closest_bird.position = target_position + 5*self.manager.delta_t*target_velocity
                 # Increment force
                 force_term += self.unit_dirn(closest_bird)*(self.prey_attraction_force)
                 # Change closest's bird position back

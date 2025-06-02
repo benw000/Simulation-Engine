@@ -29,7 +29,7 @@ def setup(args):
     if args.mode == 'run':
         return setup_run(args, manager)
     elif args.mode == 'load':
-        return setup_load(args, manager)
+        return manager
 
 def setup_run(args, manager):
     # ---- VALIDATE ARGS ----
@@ -58,10 +58,6 @@ def setup_run(args, manager):
         Star(np.array([400,700]),np.array([0,-100]))
 
     return manager
-
-def setup_load(args, manager):
-    # Not sure theres any more to do
-    return manager
     
 def draw_backdrop_plt(ax):
     """
@@ -77,14 +73,6 @@ def draw_backdrop_plt(ax):
 
     # Black background
     ax.set_facecolor('k')
-
-
-
-
-
-
-
-
 
 
 
@@ -152,33 +140,33 @@ class Star(Particle):
     # CSV utilities - Legacy functions but working
 
     # TODO: Move these to a legacy script
-    def write_csv_list(self):
-        '''
-        Format for compressing each Star instance into CSV.
-        '''
-        # Individual child instance info
-        return [self.id, self.mass, self.colour, \
-                self.position[0], self.position[1], \
-                self.last_position[0],self.last_position[1],
-                self.velocity[0], self.velocity[1],
-                self.acceleration[0], self.acceleration[1] ]
+    # def write_csv_list(self):
+    #     '''
+    #     Format for compressing each Star instance into CSV.
+    #     '''
+    #     # Individual child instance info
+    #     return [self.id, self.mass, self.colour, \
+    #             self.position[0], self.position[1], \
+    #             self.last_position[0],self.last_position[1],
+    #             self.velocity[0], self.velocity[1],
+    #             self.acceleration[0], self.acceleration[1] ]
 
-    def read_csv_list(self, system_state_list, idx_shift):
-        '''
-        Format for parsing the compressed Star instances from CSV.
-        '''
-        self.mass = float(system_state_list[idx_shift+1])
-        self.colour = float(system_state_list[idx_shift+2])
-        self.position = np.array([float(system_state_list[idx_shift+3]), \
-                                    float(system_state_list[idx_shift+4])])
-        self.last_position = np.array([float(system_state_list[idx_shift+5]), \
-                                    float(system_state_list[idx_shift+6])])
-        self.velocity = np.array([float(system_state_list[idx_shift+7]), \
-                                    float(system_state_list[idx_shift+8])])
-        self.acceleration = np.array([float(system_state_list[idx_shift+9]), \
-                                    float(system_state_list[idx_shift+10])])
-        # Update idx shift to next id and return
-        return idx_shift+11
+    # def read_csv_list(self, system_state_list, idx_shift):
+    #     '''
+    #     Format for parsing the compressed Star instances from CSV.
+    #     '''
+    #     self.mass = float(system_state_list[idx_shift+1])
+    #     self.colour = float(system_state_list[idx_shift+2])
+    #     self.position = np.array([float(system_state_list[idx_shift+3]), \
+    #                                 float(system_state_list[idx_shift+4])])
+    #     self.last_position = np.array([float(system_state_list[idx_shift+5]), \
+    #                                 float(system_state_list[idx_shift+6])])
+    #     self.velocity = np.array([float(system_state_list[idx_shift+7]), \
+    #                                 float(system_state_list[idx_shift+8])])
+    #     self.acceleration = np.array([float(system_state_list[idx_shift+9]), \
+    #                                 float(system_state_list[idx_shift+10])])
+    #     # Update idx shift to next id and return
+    #     return idx_shift+11
     
     # NDJSON
     def to_dict(self):
@@ -196,6 +184,7 @@ class Star(Particle):
         instance.last_position = np.array(dict["last_position"])
         instance.mass = dict["mass"]
         instance.colour = dict["colour"]
+        instance.alive = dict["alive"]
         return instance
     
     
