@@ -4,3 +4,5 @@ Simulation_Videos/
 Simulation_Logs/
 __pycache__
 todo.md
+launch.json
+settings.json
