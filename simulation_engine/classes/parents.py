@@ -66,7 +66,7 @@ class Particle:
         else:
             self.velocity = velocity
             # v = (current-last)/dt , so last = current - v*dt
-            self.last_position = self.position - self.velocity*self.delta_t
+            self.last_position = self.position - self.velocity*self.manager.delta_t
 
         # Initialise acceleration as attribute
         self.acceleration = np.zeros(2)
@@ -109,13 +109,10 @@ class Particle:
         
     def unalive(self):
         ''' 
-        Sets the class instance with this id to be not alive, decrements the class count.
+        Sets the class instance with this id to be not alive
         '''
         # Update alive
         self.alive = False
-
-        # Remove from manager
-        #self.manager.state["Particle"][self.__class__.__name__].pop(self.id)
 
     @classmethod
     def iterate_class_instances(cls):
@@ -349,15 +346,15 @@ class Particle:
             return
 
         # Find last position from velocity - avoids torus wrapping problems
-        self.last_position = self.position - self.velocity*self.delta_t
+        self.last_position = self.position - self.velocity*self.manager.delta_t
 
         # Verlet Integration
         # Use tuple unpacking so we dont need a temp variable
-        self.position, self.last_position = 2*self.position - self.last_position +self.acceleration*((self.delta_t)**2), self.position
+        self.position, self.last_position = 2*self.position - self.last_position +self.acceleration*((self.manager.delta_t)**2), self.position
         
         # Update velocity
         displacement = (self.position - self.last_position)
-        self.velocity = displacement/self.delta_t
+        self.velocity = displacement/self.manager.delta_t
 
         # Enforce speed limit
         if self.max_speed is not None:
@@ -609,7 +606,7 @@ class Environment:
     def __init__(self, unlinked=False):
         # Add self to manager
         if not unlinked:
-            self.manager.state[self.__class__.__name__].append(self)
+            self.manager.state["Environment"][self.__class__.__name__].append(self)
 
         # Initialise artists
         self.plt_artists = None
@@ -618,6 +615,18 @@ class Environment:
         new_dict = {
         }
         return new_dict
+    
+    @staticmethod
+    def orient_to_com(position:np.ndarray, com, scale):
+        ''' Affine translation on point coordinates to prepare for plotting.  '''
+        # Check both not None
+        if com is None or scale is None:
+            return position
+        # Transform
+        centre = np.array([0.5*Particle.env_x_lim, 0.5*Particle.env_y_lim])
+        term = np.min(centre)
+        return centre + (position - com) * 0.8 * term/scale #* 1/scale
+    
 
     
 
@@ -625,8 +634,10 @@ class Wall(Environment):
     '''
     Encodes instance of a wall
     '''
-    def __init__(self, a_position, b_position, line_colour='k', edge_colour='r', unlinked=False) -> None:
-        super.__init__(unlinked)
+    DEFAULT_LINE_COLOUR = 'k'
+    DEFAULT_EDGE_COLOUR = 'r'
+    def __init__(self, a_position, b_position, line_colour=DEFAULT_LINE_COLOUR, edge_colour=DEFAULT_EDGE_COLOUR, unlinked=False) -> None:
+        super().__init__(unlinked)
         self.a_position = a_position
         self.b_position = b_position
         self.line_colour = line_colour
@@ -701,8 +712,8 @@ class Wall(Environment):
     def to_dict(self):
         parent_dict = super().to_dict()
         new_dict = {
-            "a_position":self.a_position,
-            "b_position":self.b_position,
+            "a_position":self.a_position.tolist(),
+            "b_position":self.b_position.tolist(),
             "line_colour":self.line_colour,
             "edge_colour":self.edge_colour
         }
@@ -710,8 +721,8 @@ class Wall(Environment):
     
     @classmethod
     def from_dict(cls, new_dict):
-        instance = cls(a_position=new_dict["a_position"],
-                   b_position=new_dict["b_position"],
+        instance = cls(a_position=np.array(new_dict["a_position"]),
+                   b_position=np.array(new_dict["b_position"]),
                    line_colour=new_dict["line_colour"],
                    edge_colour=new_dict["edge_colour"],
                    unlinked=True)
@@ -724,23 +735,23 @@ class Wall(Environment):
         '''
         Updates the stored self.plt_artist PathCollection with new position
         '''
-        raise NotImplementedError
-        # TODO: Get plot position in frame
-        plot_positions = self.orient_to_com(com, scale)
-        x_vals = np.array([self.a_position[0], self.b_position[0]])
-        y_vals = np.array([self.a_position[1], self.b_position[1]])
+        a_plot_position = self.orient_to_com(self.a_position, com, scale)
+        b_plot_position = self.orient_to_com(self.b_position, com, scale)
+        x_vals = np.array([a_plot_position[0], b_plot_position[0]])
+        y_vals = np.array([a_plot_position[1], b_plot_position[1]])
         ax.plot(x_vals, y_vals, c=self.line_colour)
         ax.scatter(x_vals,y_vals,s=20,c=self.edge_colour)
 
         if self.plt_artists is None:
             # Initialise PathCollection artist as scatter plot point
             self.plt_artists = []
-            self.plt_artists.append(ax.plot(x_vals, y_vals, c=self.line_colour))
+            self.plt_artists.append(ax.plot(x_vals, y_vals, c=self.line_colour)[0])
             self.plt_artists.append(ax.scatter(x_vals,y_vals,s=20,c=self.edge_colour))
         else:
+            return self.plt_artists
             # Update with offset
             self.plt_artists[0].set_data(x_vals, y_vals)
-            self.plt_artists[1].set_offsets(x_vals, y_vals)
+            self.plt_artists[1].set_offsets(np.column_stack((x_vals, y_vals)))
 
         return self.plt_artists
 
@@ -756,28 +767,28 @@ class Target(Environment):
 
     def __str__(self) -> str:
         return f"Target_[{self.position}]_[{self.capture_thresh}]]."
-
+    
     def copy_state(self, new_object):
         self.position = new_object.position
-        self.capture_radius = new_object.capture_radius
+        self.capture_thresh = new_object.capture_thresh
         self.colour = new_object.colour
 
     # LOGGING
     def to_dict(self):
         parent_dict = super().to_dict()
         new_dict = {
-            "position":self.position,
-            "capture_radius":self.capture_radius,
+            "position":self.position.tolist(),
+            "capture_thresh":self.capture_thresh,
             "colour":self.colour
         }
         return parent_dict | new_dict
     
     @classmethod
     def from_dict(cls, new_dict):
-        instance = cls(position=new_dict["position"],
-                   capture_radius=new_dict["capture_radius"],
+        instance = cls(position=np.array(new_dict["position"]),
                    colour=new_dict["colour"],
                    unlinked=True)
+        instance.capture_thresh=new_dict["capture_thresh"]
         return instance
     
     # -------------------------------------------------------------------------
@@ -787,17 +798,15 @@ class Target(Environment):
         '''
         Updates the stored self.plt_artist PathCollection with new position
         '''
-        raise NotImplementedError
-        # TODO: Get plot position in frame
-        plot_positions = self.orient_to_com(com, scale)
-        x_position, y_position = self.orient_to_com(com, scale)
+        plot_position = self.orient_to_com(self.position, com, scale)
 
         if self.plt_artists is None:
             # Initialise PathCollection artist as scatter plot point
             self.plt_artists = []
-            self.plt_artists.append(ax.scatter(x_position, y_position,s=20, c=self.colour, marker='x'))
+            self.plt_artists.append(ax.scatter(plot_position[0], plot_position[1], s=20, c=self.colour, marker='x'))
         else:
+            return self.plt_artists
             # Update with offset
-            self.plt_artists[0].set_offsets(x_position, y_position)
+            self.plt_artists[0].set_offsets(plot_position)
 
         return self.plt_artists

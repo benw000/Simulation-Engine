@@ -66,7 +66,7 @@ class Manager:
         # Time
         self.num_steps: int = args.steps
         if args.deltat is None:
-            self.deltat = 0.01
+            self.delta_t = 0.01
         else:
             self.delta_t: float = args.deltat
         self.current_time = 0
