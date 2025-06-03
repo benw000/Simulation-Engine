@@ -7,6 +7,7 @@ from simulation_engine.utils.manager import Manager
 # =====================================================================================
 
 # ---- SETUP ----
+
 def setup(args):
     """
     Called by main entrypoint script as entry into this simulation 'type' module.
@@ -17,7 +18,7 @@ def setup(args):
     """
     # Default timestep
     if args.deltat is None:
-        args.deltat = 0.05
+        args.deltat=Solid.DEFAULT_TIMESTEP
 
     # Create manager instance
     manager = Manager(args = args, 
@@ -75,6 +76,9 @@ class Solid(Particle):
     # -------------------------------------------------------------------------
     # Attributes
 
+    # Default timestep
+    DEFAULT_TIMESTEP = 0.05
+    
     # Forces
     spring_length = 12 # use 12 or 10
     spring_constant = 3

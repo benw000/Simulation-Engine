@@ -17,6 +17,8 @@ def setup(args):
     Args:
         args (argparse.Namespace): argparse namespace of user supplied arguments
     """
+    if args.deltat is None:
+        args.deltat=Particle.DEFAULT_TIMESTEP
     # Create manager instance
     manager = Manager(args = args, 
                       show_graph = False,

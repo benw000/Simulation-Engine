@@ -20,7 +20,7 @@ SETUP_FUNC_DICT = {
     "pool": simulation_engine.classes.pool.setup
 }
 # Track implementations
-IMPLEMENTED_TYPES = ["nbody", "birds", "springs", "pool"]
+IMPLEMENTED_TYPES = ["nbody", "birds", "springs", "pool", "evac"]
 INTERACTIVE_SUPPORTED_TYPES = []
 
 # ---- VALIDATION FUNCTIONS ----
@@ -263,7 +263,7 @@ if __name__=="__main__":
     parser.add_argument('-i','--interactive', action='store_true', help="Use this flag to in run mode to run interactively (like a game)", default=False)
     # Simulation setup
     parser.add_argument('-t','--steps', type=int, help='The number of timesteps in the simulation', default=100)
-    parser.add_argument('-d','--deltat', type=float, help='The duration of each timestep in seconds', default=0.01)
+    parser.add_argument('-d','--deltat', type=float, help='The duration of each timestep in seconds', default=None)
     parser.add_argument('-n','--nums', nargs='+', type=int, help='The number of particles in each class for a multi-class simulation. List of ints e.g 1 4 5', default=None)
     # Simulation memory and saving
     parser.add_argument('-s','--sync', action='store_true', help="Use this flag to synchronously animate each frame as soon as it's computed - otherwise simulation is fully computed and then animated", default=False)
