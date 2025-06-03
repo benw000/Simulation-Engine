@@ -81,6 +81,7 @@ def draw_backdrop_plt(ax):
 def draw_graph_plt(ax2):
     # TODO: Fix up
     # Draw a graph
+    return
     ax2.clear()
     max_time = int(self.num_timesteps)*self.delta_t
     ax2.set_xlim(0, max_time)  # Set x-axis limits
@@ -111,12 +112,14 @@ class Human(Particle):
     DEFAULT_TIMESTEP = 0.05
     personal_space = 0.5 # metres - 2 rulers between centres
     personal_space_repulsion = 300 # Newtons
-    wall_dist_thresh = 0.2
+    wall_dist_thresh = 0.5
     wall_repulsion = 2000
     wall_deflection = 3000
     # Constant force from each human to their target
     target_attraction = 200
     random_force = 100
+
+    angles_list = []
     
     # Initialisation
     def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, id=None) -> None:
@@ -135,14 +138,41 @@ class Human(Particle):
     # -------------------------------------------------------------------------
     # Distance utilities
 
-    def wall_deflection_dirn(self, wall_dist, wall_dirn):
+    def wall_deflection_dirn(self, wall):
+        """
+        Create an arbitrary force term to repel Human away from walls, in direction of target.
+
+        Args:
+            wall (Wall): Wall that the Human is within distance threshold of
+
+        Returns:
+            np.ndarray (2,): Force term
+        """
+        '''
+        When the wall isnt normal to the line from Human to Target, this is easy:
+            - We get the angle between this normal and the Human's desired line
+            - Depending on positive or negative angle, we push the Human +-the wall vector direction along the wall
+            - This makes them shuffle/deflect along the wall while still being repelled by it as well.
+        When the wall is normal:
+            - We can have the Human headbutting the wall, not knowing which way to go.
+            - Ideally a proper evacuation sim would incorporate elements of pathfinding.
+        Deflection against the wall is one of the reasons why a purely force-based model fails,
+        since we need to incorporate increasingly complicated heuristic forces to replicate intelligent behaviour.
+        '''
+        # Get distance and direction to current target
+        wall_dist, wall_dirn = wall.dist_to_wall(self)
+        wall_normal = wall.perp_vec
         target_dist, target_dirn = self.dist(self.my_target, return_both=True)
-        angle = np.arccos(np.dot(-wall_dirn,target_dirn)/(wall_dist*target_dist))
+        # Get the angle between the particle<->target line and the normal to the wall
+        angle = np.arccos(np.dot(wall_normal,target_dirn)/(np.linalg.norm(wall_normal)*np.linalg.norm(target_dirn)))
+        # Tolerance to not apply force when in line with wall
         tolerance = 1e-6
-        if angle > (-np.pi / 2 + tolerance) and angle < 0:
+        # Fudge factor to make Human decisive - no bouncing around equillibrium of zero
+        fudge = 0.2
+        if angle > ((-np.pi / 2) + tolerance) and angle < fudge:
             force_dirn = np.matmul(np.array([[0,-1],[1,0]]),wall_dirn)/wall_dist
             return force_dirn * self.wall_deflection # * np.cos(0.25*angle)
-        elif angle>= 0 and angle<np.pi/2:
+        elif angle >= fudge and angle<np.pi/2 - tolerance:
             force_dirn = np.matmul(np.array([[0,1],[-1,0]]),wall_dirn)/wall_dist
             return force_dirn * self.wall_deflection # * np.cos(0.25*angle)
         else:
@@ -157,7 +187,7 @@ class Human(Particle):
         Calculates main acceleration term from force-based model of environment.
         '''
         # Reconsider target every 20 timesteps
-        if self.manager.current_step % 5 == 0:
+        if self.manager.current_step % 10 == 0:
             self.my_target = Target.find_closest_target(self)
 
         # Instantiate force term
@@ -188,7 +218,7 @@ class Human(Particle):
                 force_term += dirn * (self.wall_repulsion/(dist))
                 # Make Humans smart - repel sideways if vector to target is directly blocked by wall
                 if dist < self.wall_dist_thresh: #*0.5:
-                    force_term += self.wall_deflection_dirn(dist, dirn)
+                    force_term += self.wall_deflection_dirn(wall)
 
         # Random force - stochastic noise
         # Generate between [0,1], map to [0,2] then shift to [-1,1]
@@ -271,3 +301,9 @@ class Human(Particle):
         
         return self.plt_artists
 
+'''
+TODO: 
+- Wall deflection only works one way! Work out whats happening with angles,
+  clean up wall deflection code to be more readable
+- Create draw_graph_plt, change manager code so that draw_graph is passed manager
+'''
