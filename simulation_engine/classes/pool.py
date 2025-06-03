@@ -1,10 +1,10 @@
-import copy
 import numpy as np
-from .parents import Particle, Environment, Wall, Target
+from .parents import Particle, Wall, Target
 from simulation_engine.utils.manager import Manager
 
 def setup(args):
-    args.deltat=0.01
+    if args.deltat is None:
+        args.deltat=Pool.DEFAULT_TIMESTEP
     # Create manager instance
     manager = Manager(args = args, 
                       show_graph = False,
@@ -25,7 +25,6 @@ def setup(args):
 def setup_run(args, manager):
     # ---- VALIDATE ARGS ----
 
- 
     # Set Particle geometry attributes
     Particle.track_com = False
     Particle.torus = False
@@ -67,6 +66,7 @@ class Pool(Particle):
     plot_text = False
 
     # Constants
+    DEFAULT_TIMESTEP = 0.01
     damping_constant = 0.1
     diameter = 0.051 # 5.1 cm diameter of pool ball
     k_ball = 0.3 #0.5
@@ -260,7 +260,6 @@ class Pool(Particle):
     # NDJSON
     def to_dict(self):
         new_dict = super().to_dict()
-        new_dict["mass"] = self.mass
         new_dict["colour"] = self.colour
         return new_dict
     
@@ -273,6 +272,7 @@ class Pool(Particle):
         instance.last_position = np.array(dict["last_position"])
         instance.mass = dict["mass"]
         instance.colour = dict["colour"]
+        instance.alive = dict["alive"]
         return instance
     
     # -------------------------------------------------------------------------

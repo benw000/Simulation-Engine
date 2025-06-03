@@ -197,7 +197,6 @@ class Prey(Particle):
     # NDJSON
     def to_dict(self):
         new_dict = super().to_dict()
-        new_dict["mass"] = self.mass
         new_dict["max_speed"] = self.max_speed
         return new_dict
     

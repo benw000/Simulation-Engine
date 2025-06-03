@@ -171,7 +171,6 @@ class Star(Particle):
     # NDJSON
     def to_dict(self):
         new_dict = super().to_dict()
-        new_dict["mass"] = self.mass
         new_dict["colour"] = self.colour
         return new_dict
     
