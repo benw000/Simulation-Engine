@@ -25,6 +25,9 @@ class Particle:
     track_com: bool = False
     torus = False
     
+    # Default timestep
+    DEFAULT_TIMESTEP = 0.01
+    
     # Initialisation function
     def __init__(self,
                 position: np.ndarray = None,
@@ -68,8 +71,9 @@ class Particle:
             # v = (current-last)/dt , so last = current - v*dt
             self.last_position = self.position - self.velocity*self.manager.delta_t
 
-        # Initialise acceleration as attribute
+        # Initialise acceleration as attribute, mass as 1
         self.acceleration = np.zeros(2)
+        self.mass = 1
 
         # Bools for hacky changes outside of force model
         self.max_speed = None
@@ -376,6 +380,7 @@ class Particle:
             "last_position":self.last_position.tolist(),
             "velocity":self.velocity.tolist(),
             "acceleration":self.acceleration.tolist(),
+            "mass":self.mass,
             "alive":self.alive
         }
         return new_dict
@@ -735,23 +740,23 @@ class Wall(Environment):
         '''
         Updates the stored self.plt_artist PathCollection with new position
         '''
-        a_plot_position = self.orient_to_com(self.a_position, com, scale)
-        b_plot_position = self.orient_to_com(self.b_position, com, scale)
-        x_vals = np.array([a_plot_position[0], b_plot_position[0]])
-        y_vals = np.array([a_plot_position[1], b_plot_position[1]])
-        ax.plot(x_vals, y_vals, c=self.line_colour)
-        ax.scatter(x_vals,y_vals,s=20,c=self.edge_colour)
-
         if self.plt_artists is None:
+            # Get positions
+            a_plot_position = self.orient_to_com(self.a_position, com, scale)
+            b_plot_position = self.orient_to_com(self.b_position, com, scale)
+            x_vals = np.array([a_plot_position[0], b_plot_position[0]])
+            y_vals = np.array([a_plot_position[1], b_plot_position[1]])
+
             # Initialise PathCollection artist as scatter plot point
             self.plt_artists = []
             self.plt_artists.append(ax.plot(x_vals, y_vals, c=self.line_colour)[0])
             self.plt_artists.append(ax.scatter(x_vals,y_vals,s=20,c=self.edge_colour))
         else:
-            return self.plt_artists
+            pass
+            # Currently assuming Walls don't move
             # Update with offset
-            self.plt_artists[0].set_data(x_vals, y_vals)
-            self.plt_artists[1].set_offsets(np.column_stack((x_vals, y_vals)))
+            # self.plt_artists[0].set_data(x_vals, y_vals)
+            # self.plt_artists[1].set_offsets(np.column_stack((x_vals, y_vals)))
 
         return self.plt_artists
 
@@ -768,6 +773,16 @@ class Target(Environment):
     def __str__(self) -> str:
         return f"Target_[{self.position}]_[{self.capture_thresh}]]."
     
+    @classmethod
+    def find_closest_target(cls, particle):
+        closest_target = None
+        dist = 100*Particle.env_x_lim**2
+        for target in cls.manager.state["Environment"]["Target"]:
+            if np.linalg.norm(target.position - particle.position) < dist:
+                dist = np.linalg.norm(target.position - particle.position) 
+                closest_target = target
+        return closest_target
+
     def copy_state(self, new_object):
         self.position = new_object.position
         self.capture_thresh = new_object.capture_thresh
@@ -798,15 +813,16 @@ class Target(Environment):
         '''
         Updates the stored self.plt_artist PathCollection with new position
         '''
-        plot_position = self.orient_to_com(self.position, com, scale)
-
         if self.plt_artists is None:
+            # Get position
+            plot_position = self.orient_to_com(self.position, com, scale)
             # Initialise PathCollection artist as scatter plot point
             self.plt_artists = []
             self.plt_artists.append(ax.scatter(plot_position[0], plot_position[1], s=20, c=self.colour, marker='x'))
         else:
-            return self.plt_artists
+            pass
+            # Currently assuming Targets dont move
             # Update with offset
-            self.plt_artists[0].set_offsets(plot_position)
+            # self.plt_artists[0].set_offsets(plot_position)
 
         return self.plt_artists
