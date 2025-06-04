@@ -8,7 +8,7 @@ from simulation_engine.utils.manager import Manager
 def setup(args):
     if args.deltat is None:
         args.deltat=Human.DEFAULT_TIMESTEP
-    show_graph = False
+    show_graph = True
     # Create manager instance
     manager = Manager(args = args, 
                       show_graph = show_graph,
@@ -64,6 +64,10 @@ def setup_run(args, manager):
     for i in range(args.nums[0]):
         Human()
 
+    # Initialise statistics
+    manager.state["num_evacuees"] = args.nums[0]
+    manager.state["num_escaped"] = 0
+
     return manager
 
 def draw_backdrop_plt(ax):
@@ -78,40 +82,76 @@ def draw_backdrop_plt(ax):
     ax.set_facecolor('w')
     return ax
 
-def draw_graph_plt(ax2):
-    # TODO: Fix up
-    # Draw a graph
-    return
-    ax2.clear()
-    max_time = int(self.num_timesteps)*self.delta_t
-    ax2.set_xlim(0, max_time)  # Set x-axis limits
-    ax2.set_ylim(0, Particle.num_evacuees) 
-    xticks = [i for i in range(int(max_time)) if i % 5 == 0] + [max_time]  # Positions where you want the labels
-    ax2.set_xticks(xticks)  # Set ticks at every value in the range
-    ax2.set_xlabel("Time (s)")
-    ax2.set_title(f"Number evacuated over time")
-    ax2.set_aspect(aspect=Particle.env_y_lim/Particle.env_x_lim)
-    t_vals = []
-    y_vals = []
-    for key, item in Particle.kill_record.items():
-        if key <= timestep:
-            t_vals += [int(key)*Particle.delta_t]
-            y_vals += [item]
-    ax2.plot(t_vals, y_vals, c='b')
-    ax2.scatter(int(timestep)*Particle.delta_t,Particle.kill_record[timestep], marker='x', c='r')
+def draw_graph_plt(manager, ax2):
+    """
+    Function to update the graph on ax2 with latest information.
 
+    - Stores the graph plt artists in Human.plt_graph_artists list attribute
+    - These artists contain graph history, which is appended to,
+      allowing us to draw a dynamic graph with a history trail.
+    - Relies on plt artist methods get_offsets() to access stored history
 
+    Args:
+        manager (Manager): The current manager instance
+        ax2 (plt.Axes): The matplotlib axes which the graph is plotted on
+
+    Returns:
+        list: List of plt artists (used for blitting)
+    """
+    # Reset
+    if manager.current_step == 0:
+        Human.plt_graph_artists = None
+
+    if Human.plt_graph_artists is None:
+        # Set up the graph at the start
+        ax2.clear()
+        max_time = int(manager.num_steps)*manager.delta_t
+        ax2.set_xlim(0, max_time)  # Set x-axis limits
+        ax2.set_ylim(0, manager.state["num_evacuees"]) 
+        xticks = [i for i in range(int(max_time)) if i % 5 == 0] + [max_time]  # Positions where you want the labels
+        ax2.set_xticks(xticks)  # Set ticks at every value in the range
+        ax2.set_xlabel("Time (s)")
+        ax2.set_title(f"Number evacuated over time")
+        ax2.set_aspect(aspect=Particle.env_y_lim/Particle.env_x_lim)
+
+        # Get starting data
+        y = manager.state["num_escaped"]
+        x = manager.current_time
+        # Initialise artists with scatter and plot
+        Human.plt_graph_artists = [
+            plt.plot([x],[y], c='b')[0], # Plot cumulative history
+            plt.scatter([x],[y], marker='x', c='r') # Plot current point
+        ]
+    else:
+        # Get current data from plt.plot
+        x_data, y_data = Human.plt_graph_artists[0].get_data()
+        # Get latest data
+        y = manager.state["num_escaped"]
+        x = manager.current_time
+        # Append
+        x_data = np.hstack((x_data, x))
+        y_data = np.hstack((y_data, y))
+        # Replot
+        Human.plt_graph_artists[0].set_data(x_data, y_data)
+        Human.plt_graph_artists[1].set_offsets([x,y])
+
+    return Human.plt_graph_artists
+        
 
 class Human(Particle):
     '''
     Human particle for crowd simulation.
     '''
     # -------------------------------------------------------------------------
-    # Attributes
+    # Force model constants
 
+    # Default timestep
     DEFAULT_TIMESTEP = 0.05
+
+    # Personal space Human-Human repulsion
     personal_space = 0.5 # metres - 2 rulers between centres
     personal_space_repulsion = 300 # Newtons
+    # Wall repulsion/deflection
     wall_dist_thresh = 0.5
     wall_repulsion = 2000
     wall_deflection = 3000
@@ -119,14 +159,17 @@ class Human(Particle):
     target_attraction = 200
     random_force = 100
 
-    angles_list = []
+    # Tracking statistics
+    num_evacuees = None
+    num_escaped = 0
+    plt_graph_artists = None
     
     # Initialisation
-    def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, id=None) -> None:
+    def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, unlinked=None) -> None:
         '''
         Initialises a Human, inheriting from the Particle class.
         '''
-        super().__init__(position, velocity, id)
+        super().__init__(position, velocity, unlinked)
 
         # Human specific attributes
         self.mass = 50
@@ -198,6 +241,7 @@ class Human(Particle):
         for target in self.manager.state["Environment"]["Target"]:
             dist, dirn = self.dist(target, return_both=True)
             if dist < target.capture_thresh:
+                self.manager.state["num_escaped"] += 1
                 self.unalive()
                 return 1
             elif target is self.my_target:
@@ -306,4 +350,20 @@ TODO:
 - Wall deflection only works one way! Work out whats happening with angles,
   clean up wall deflection code to be more readable
 - Create draw_graph_plt, change manager code so that draw_graph is passed manager
+'''
+
+
+'''
+Graph
+- use a Human.statistics getter and setter
+- if any Humans are unalived, before that add 1 to num_escaped, initialise as 0
+- also add {timestep:num_escaped} as entry into Human.statistics
+- ideally we could once per timestep update statistics:
+  currently can only do it in update_acceleration call which is for each particle,
+  want to do it at end
+- then need second function to make this directly plottable, or second getter
+- either way, draw_graph calls this Human.statistics so either has _statistics or computes from history/logs
+
+Get offsets works, so now just need to record stats in the manager state
+
 '''

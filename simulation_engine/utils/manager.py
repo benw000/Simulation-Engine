@@ -261,6 +261,9 @@ class Manager:
                     for index, child in enumerate(child_class_list):
                         existing_child_class_list = self.state[key][child_class_name]
                         existing_child_class_list[index].copy_state(child)
+            else:
+                # Assuming we can just copy
+                self.state[key] = val
     # =============================================================
 
     # ---- MAIN PIPELINE OPERATIONS ----
@@ -451,7 +454,7 @@ class Manager:
             plt.subplots_adjust(wspace=0.3)
 
             # Initialise ax2 by plotting dimensions
-            max_time = int(self.num_timesteps)*self.delta_t
+            max_time = int(self.num_steps)*self.delta_t
             ax2.set_xlim(0, max_time) 
         else:
             # Setup figure
@@ -733,11 +736,11 @@ class Manager:
         # TODO: Add any shared functionality here
         # Currently just wrapping draw_graph_plt_func
         artists = []
-        artists += self.draw_graph_plt_func(ax2)
+        artists += self.draw_graph_plt_func(self, ax2)
         return artists
 
     @staticmethod
-    def _default_draw_graph_plt(self, ax2:plt.Axes):
+    def _default_draw_graph_plt(manager, ax2:plt.Axes):
         """
         Default function to draw graph corresponding to current state onto given axes.
         Ideally replaced by a particular simulation type's own function.
@@ -746,7 +749,7 @@ class Manager:
             ax (plt.Axes): Main plot frame axes
         """
         artists = []
-        max_time = int(self.num_timesteps)*self.delta_t
+        max_time = int(manager.num_timesteps)*manager.delta_t
         ax2.set_xlim(0, max_time)  # Set x-axis limits
         return artists
     
