@@ -3,12 +3,12 @@ from scipy.stats import loguniform
 import matplotlib.pyplot as plt
 
 from simulation_engine.utils.errors import SimulationEngineInputError
-from simulation_engine.classes.parents import Particle, Environment
+from simulation_engine.classes.parents import Particle
 from simulation_engine.utils.manager import Manager
 
-# =====================================================================================
+# -------------------------------------------------------------------------
+# Setup
 
-# ---- SETUP ----
 def setup(args):
     """
     Called by main entrypoint script as entry into this simulation 'type' module.
@@ -34,11 +34,9 @@ def setup(args):
         return manager
 
 def setup_run(args, manager):
-    # ---- VALIDATE ARGS ----
+    # Validate args
     if not len(args.nums) == 1:
         raise SimulationEngineInputError("(-n, --nums) Please only supply 1 argument for population when using nbody simulation type")
-
-    # TODO: For other modes, initialise environment object list and add to manager state dict
     
     # Set Particle geometry attributes
     Particle.env_x_lim = 1000
@@ -77,10 +75,6 @@ def draw_backdrop_plt(ax):
     ax.set_facecolor('k')
 
 
-
-# =====================================================================================
-
-# ---- Star class ----
 class Star(Particle):
     '''
     Star particle for N-body simulation
@@ -139,38 +133,8 @@ class Star(Particle):
         return 0
 
     # -------------------------------------------------------------------------
-    # CSV utilities - Legacy functions but working
+    # Logging
 
-    # TODO: Move these to a legacy script
-    # def write_csv_list(self):
-    #     '''
-    #     Format for compressing each Star instance into CSV.
-    #     '''
-    #     # Individual child instance info
-    #     return [self.id, self.mass, self.colour, \
-    #             self.position[0], self.position[1], \
-    #             self.last_position[0],self.last_position[1],
-    #             self.velocity[0], self.velocity[1],
-    #             self.acceleration[0], self.acceleration[1] ]
-
-    # def read_csv_list(self, system_state_list, idx_shift):
-    #     '''
-    #     Format for parsing the compressed Star instances from CSV.
-    #     '''
-    #     self.mass = float(system_state_list[idx_shift+1])
-    #     self.colour = float(system_state_list[idx_shift+2])
-    #     self.position = np.array([float(system_state_list[idx_shift+3]), \
-    #                                 float(system_state_list[idx_shift+4])])
-    #     self.last_position = np.array([float(system_state_list[idx_shift+5]), \
-    #                                 float(system_state_list[idx_shift+6])])
-    #     self.velocity = np.array([float(system_state_list[idx_shift+7]), \
-    #                                 float(system_state_list[idx_shift+8])])
-    #     self.acceleration = np.array([float(system_state_list[idx_shift+9]), \
-    #                                 float(system_state_list[idx_shift+10])])
-    #     # Update idx shift to next id and return
-    #     return idx_shift+11
-    
-    # NDJSON
     def to_dict(self):
         new_dict = super().to_dict()
         new_dict["colour"] = self.colour
@@ -188,11 +152,9 @@ class Star(Particle):
         instance.alive = dict["alive"]
         return instance
     
-    
-    
     # -------------------------------------------------------------------------
-    
-    # ---- MATPLOTLIB ----
+    # Matplotlib
+
     def draw_plt(self, ax:plt.Axes, com=None, scale=None):
         '''
         Updates the stored self.plt_artist PathCollection with new position

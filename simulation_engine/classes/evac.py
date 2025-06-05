@@ -1,11 +1,20 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from .parents import Particle, Wall, Target
+
+from simulation_engine.classes import Particle, Wall, Target
 from simulation_engine.utils.manager import Manager
 
-
+# -------------------------------------------------------------------------
+# Setup
 
 def setup(args):
+    """
+    Called by main entrypoint script as entry into this simulation 'type' module.
+    Divides between different setup functions for each different 'mode'
+
+    Args:
+        args (argparse.Namespace): argparse namespace of user supplied arguments
+    """
     if args.deltat is None:
         args.deltat=Human.DEFAULT_TIMESTEP
     show_graph = True
@@ -71,9 +80,13 @@ def setup_run(args, manager):
     return manager
 
 def draw_backdrop_plt(ax):
-    # Get an ax from manager, and plot things on it related to this mode
-    # Overrides Manager.default_draw_backdrop_plt
+    """
+    Get an ax from manager, and plot things on it related to this mode
+    Overrides Manager.default_draw_backdrop_plt
 
+    Args:
+        ax (plt.Axes): Main matplotlib frame
+    """
     # Set padded limits
     ax.set_xlim(-1, Particle.env_x_lim+1)
     ax.set_ylim(-1, Particle.env_y_lim+1)
@@ -221,7 +234,6 @@ class Human(Particle):
         else:
             return np.zeros(2)
 
-
     # -------------------------------------------------------------------------
     # Main force model 
 
@@ -274,35 +286,8 @@ class Human(Particle):
         return 0
     
     # -------------------------------------------------------------------------
-    # CSV utilities
+    # Logging
 
-    # def write_csv_list(self):
-    #     '''
-    #     Format for compressing each Human instance into CSV.
-    #     '''
-    #     # Individual child instance info
-    #     return [self.id, \
-    #             self.position[0], self.position[1], \
-    #             self.last_position[0],self.last_position[1],
-    #             self.velocity[0], self.velocity[1],
-    #             self.acceleration[0], self.acceleration[1] ]
-
-    # def read_csv_list(self, system_state_list, idx_shift):
-    #     '''
-    #     Format for parsing the compressed Human instances from CSV.
-    #     '''
-    #     self.position = np.array([float(system_state_list[idx_shift+1]), \
-    #                                 float(system_state_list[idx_shift+2])])
-    #     self.last_position = np.array([float(system_state_list[idx_shift+3]), \
-    #                                 float(system_state_list[idx_shift+4])])
-    #     self.velocity = np.array([float(system_state_list[idx_shift+5]), \
-    #                                 float(system_state_list[idx_shift+6])])
-    #     self.acceleration = np.array([float(system_state_list[idx_shift+7]), \
-    #                                 float(system_state_list[idx_shift+8])])
-    #     # Update idx shift to next id and return
-    #     return idx_shift+9
-    
-    # NDJSON
     def to_dict(self):
         new_dict = super().to_dict()
         new_dict["max_speed"] = self.max_speed
@@ -321,8 +306,8 @@ class Human(Particle):
         return instance
 
     # -------------------------------------------------------------------------
-    
-    # ---- MATPLOTLIB ----
+    # Matplotlib
+
     def draw_plt(self, ax:plt.Axes, com=None, scale=None):
         '''
         Updates the stored self.plt_artist PathCollection with new position
@@ -344,26 +329,3 @@ class Human(Particle):
             self.plt_artists[0].set_offsets(plot_position)
         
         return self.plt_artists
-
-'''
-TODO: 
-- Wall deflection only works one way! Work out whats happening with angles,
-  clean up wall deflection code to be more readable
-- Create draw_graph_plt, change manager code so that draw_graph is passed manager
-'''
-
-
-'''
-Graph
-- use a Human.statistics getter and setter
-- if any Humans are unalived, before that add 1 to num_escaped, initialise as 0
-- also add {timestep:num_escaped} as entry into Human.statistics
-- ideally we could once per timestep update statistics:
-  currently can only do it in update_acceleration call which is for each particle,
-  want to do it at end
-- then need second function to make this directly plottable, or second getter
-- either way, draw_graph calls this Human.statistics so either has _statistics or computes from history/logs
-
-Get offsets works, so now just need to record stats in the manager state
-
-'''

@@ -1,8 +1,19 @@
 import numpy as np
-from .parents import Particle, Wall, Target
+
+from simulation_engine.classes import Particle, Wall, Target
 from simulation_engine.utils.manager import Manager
 
+# -------------------------------------------------------------------------
+# Setup
+
 def setup(args):
+    """
+    Called by main entrypoint script as entry into this simulation 'type' module.
+    Divides between different setup functions for each different 'mode'
+
+    Args:
+        args (argparse.Namespace): argparse namespace of user supplied arguments
+    """
     if args.deltat is None:
         args.deltat=Pool.DEFAULT_TIMESTEP
     # Create manager instance
@@ -23,8 +34,6 @@ def setup(args):
         return manager
     
 def setup_run(args, manager):
-    # ---- VALIDATE ARGS ----
-
     # Set Particle geometry attributes
     Particle.track_com = False
     Particle.torus = False
@@ -189,7 +198,6 @@ class Pool(Particle):
 
         # Go through targets and check distance to escape threshold
         # If escape possible, unalive self, and cease update function
-
         for target in self.manager.state["Environment"]["Target"]:
             dist = self.dist(target)
             if dist < self.diameter:
@@ -202,7 +210,6 @@ class Pool(Particle):
                 continue
             dist = np.sqrt(self.dist(ball))
             if dist < self.diameter - 0.0005: #0.001 1 diameter between ball centres -> collision
-                #print(f"Collision detected between {self.id} and {ball.id}, distance {dist} metres")
                 repulsion = np.min( [self.k_ball/(dist), self.max_collision_force] )
                 force_term += - self.unit_dirn(ball)*repulsion
                 self.just_reflected = True
@@ -224,40 +231,10 @@ class Pool(Particle):
         self.acceleration = force_term / self.mass
 
         return 0
-    
-
 
     # -------------------------------------------------------------------------
-    # CSV utilities
+    # Logging
 
-    def write_csv_list(self):
-        '''
-        Format for compressing each Star instance into CSV.
-        '''
-        # Individual child instance info
-        return [self.id, self.colour, \
-                self.position[0], self.position[1], \
-                self.last_position[0],self.last_position[1],
-                self.velocity[0], self.velocity[1],
-                self.acceleration[0], self.acceleration[1] ]
-
-    def read_csv_list(self, system_state_list, idx_shift):
-        '''
-        Format for parsing the compressed Star instances from CSV.
-        '''
-        self.colour = str(system_state_list[idx_shift+1])
-        self.position = np.array([float(system_state_list[idx_shift+2]), \
-                                    float(system_state_list[idx_shift+3])])
-        self.last_position = np.array([float(system_state_list[idx_shift+4]), \
-                                    float(system_state_list[idx_shift+5])])
-        self.velocity = np.array([float(system_state_list[idx_shift+6]), \
-                                    float(system_state_list[idx_shift+7])])
-        self.acceleration = np.array([float(system_state_list[idx_shift+8]), \
-                                    float(system_state_list[idx_shift+9])])
-        # Update idx shift to next id and return
-        return idx_shift+10
-    
-    # NDJSON
     def to_dict(self):
         new_dict = super().to_dict()
         new_dict["colour"] = self.colour
@@ -276,7 +253,7 @@ class Pool(Particle):
         return instance
     
     # -------------------------------------------------------------------------
-    # Animation utilities
+    # Matplotlib
 
     def draw_plt(self, ax, com=None, scale=None):
         size = 8**2
@@ -312,16 +289,3 @@ class Pool(Particle):
             self.plt_artists[-1].set_offsets(plot_position)
                 
         return self.plt_artists
-
-'''
-TODO:
-Update init, unalive
-Update update_acceleration to hook up to Manager
-New Pool.to_dict(), from_dict() methods
-Update instance_plot to draw_plt
-Remove one of the x_lim setters
-See if the Environment stuff is working or needs rehaul
-Does environment stuff work with saving to video, logs, etc
-Parts of it may need to be re-called at the start of loading from log!
-
-'''

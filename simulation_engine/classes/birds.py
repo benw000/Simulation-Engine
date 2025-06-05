@@ -1,12 +1,12 @@
 import numpy as np
 
 from simulation_engine.utils.errors import SimulationEngineInputError
-from .parents import Particle, Environment
+from simulation_engine.classes import Particle
 from simulation_engine.utils.manager import Manager
 
-# =====================================================================================
+# -------------------------------------------------------------------------
+# Setup
 
-# ---- SETUP ----
 def setup(args):
     """
     Called by main entrypoint script as entry into this simulation 'type' module.
@@ -33,7 +33,7 @@ def setup(args):
         return manager
 
 def setup_run(args, manager):
-    # ---- VALIDATE ARGS ----
+    # Validate args
     if not len(args.nums) == 2:
         raise SimulationEngineInputError("(-n, --nums) Please supply 2 arguments for population when using birds simulation type")
     
@@ -66,6 +66,7 @@ def draw_backdrop_plt(ax):
 
     # Black background
     ax.set_facecolor('skyblue')
+
 
 
 class Prey(Particle):
@@ -168,35 +169,8 @@ class Prey(Particle):
         return 0
     
     # -------------------------------------------------------------------------
-    # CSV utilities
+    # Logging
 
-    def write_csv_list(self):
-        '''
-        Format for compressing each Prey instance into CSV.
-        '''
-        # Individual child instance info
-        return [self.id, \
-                self.position[0], self.position[1], \
-                self.last_position[0],self.last_position[1],
-                self.velocity[0], self.velocity[1],
-                self.acceleration[0], self.acceleration[1] ]
-
-    def read_csv_list(self, system_state_list, idx_shift):
-        '''
-        Format for parsing the compressed Prey instances from CSV.
-        '''
-        self.position = np.array([float(system_state_list[idx_shift+1]), \
-                                    float(system_state_list[idx_shift+2])])
-        self.last_position = np.array([float(system_state_list[idx_shift+3]), \
-                                    float(system_state_list[idx_shift+4])])
-        self.velocity = np.array([float(system_state_list[idx_shift+5]), \
-                                    float(system_state_list[idx_shift+6])])
-        self.acceleration = np.array([float(system_state_list[idx_shift+7]), \
-                                    float(system_state_list[idx_shift+8])])
-        # Update idx shift to next id and return
-        return idx_shift+9
-    
-    # NDJSON
     def to_dict(self):
         new_dict = super().to_dict()
         new_dict["max_speed"] = self.max_speed
@@ -216,7 +190,7 @@ class Prey(Particle):
         return instance
 
     # -------------------------------------------------------------------------
-    # Animation utilities
+    # Matplotlib
     
     def draw_plt(self, ax, com=None, scale=None):
         facecolor = 'white'
@@ -256,7 +230,7 @@ class Predator(Particle):
         self.max_speed = 30
 
     # -------------------------------------------------------------------------
-    # Utilities
+    # Geometry
 
     def find_closest_prey(self):
         '''
@@ -327,35 +301,8 @@ class Predator(Particle):
         return 0
     
     # -------------------------------------------------------------------------
-    # CSV utilities
+    # Logging
 
-    def write_csv_list(self):
-        '''
-        Format for compressing each Predator instance into CSV.
-        '''
-        # Individual child instance info
-        return [self.id, \
-                self.position[0], self.position[1], \
-                self.last_position[0],self.last_position[1],
-                self.velocity[0], self.velocity[1],
-                self.acceleration[0], self.acceleration[1] ]
-
-    def read_csv_list(self, system_state_list, idx_shift):
-        '''
-        Format for parsing the compressed Predator instances from CSV.
-        '''
-        self.position = np.array([float(system_state_list[idx_shift+1]), \
-                                    float(system_state_list[idx_shift+2])])
-        self.last_position = np.array([float(system_state_list[idx_shift+3]), \
-                                    float(system_state_list[idx_shift+4])])
-        self.velocity = np.array([float(system_state_list[idx_shift+5]), \
-                                    float(system_state_list[idx_shift+6])])
-        self.acceleration = np.array([float(system_state_list[idx_shift+7]), \
-                                    float(system_state_list[idx_shift+8])])
-        # Update idx shift to next id and return
-        return idx_shift+9
-    
-    # NDJSON
     def to_dict(self):
         new_dict = super().to_dict()
         new_dict["mass"] = self.mass
@@ -374,35 +321,9 @@ class Predator(Particle):
         return instance
 
     # -------------------------------------------------------------------------
-    # Animation utilities
+    # Matplotlib
+
     def draw_plt(self, ax, com=None, scale=None):
         facecolor = 'red'
         plot_scale = 2
         return self.plot_as_triangle_plt(ax, com, scale, facecolor, plot_scale)
-
-
-'''
-TODO:
-Use debugger mode in informed way
-
-
-Not a lot of code - consider rewriting from scratch!
-- Eating doesnt work - somehow the prey arent removed or garbage collected
-- Both predator and prey behaviour is weird, they barely move
-- Prey seem still
-Go through and clear up logic
-see if its an issue with collecting artists which matplotlib keeps?
-
-Main bug:
-- Particles that get killed are actually never showing up in the first place!
-
-
-
-
-
-Now:
-Look at printed state dicts
-When it re-reads it thinks the particle is dead
-Need to properly sort this out, the whole dead/alive tracking is completely defunct
-Find all instances of tracking, rip it out and start again
-'''

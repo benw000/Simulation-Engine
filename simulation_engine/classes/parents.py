@@ -1,11 +1,8 @@
-import os
-import csv
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 from matplotlib.transforms import Affine2D
 from rich import print
-
 
 class Particle:
     '''
@@ -99,8 +96,24 @@ class Particle:
         self.manager.state["Particle"][class_name][self.id] = self
 
     # -------------------------------------------------------------------------
+    # Printing
+
+    def __str__(self) -> str:
+        ''' Print statement for particles. '''
+        if self.alive==1:
+            return f"Particle {self.id} at position {self.position} with velocity {self.velocity}."
+        else:
+            return f"Dead Particle {self.id} at position {self.position} with velocity {self.velocity}."
+
+    def __repr__(self) -> str:
+        ''' Debug statement for particles. '''
+        if self.alive==1:
+            return f"{self.__class__.__name__}({self.id},{self.position},{self.velocity})"
+        else:
+            return f"dead_{self.__class__.__name__}({self.id},{self.position},{self.velocity})"
+
+    # -------------------------------------------------------------------------
     # Instance management utilities
-    # TODO: Make these hidden and move to Manager when possible
 
     @classmethod
     def get_instance_by_id(cls, id):
@@ -131,33 +144,9 @@ class Particle:
         for particle in list(class_dict.values()):
             if particle.alive:
                 yield particle
-
-    def copy_state(self, new_object):
-        self.position = new_object.position
-        self.velocity = new_object.velocity
-        self.acceleration = new_object.acceleration
-        self.last_position = new_object.last_position
-        self.alive = new_object.alive
     
     # -------------------------------------------------------------------------
-    # Dunder
-
-    def __str__(self) -> str:
-        ''' Print statement for particles. '''
-        if self.alive==1:
-            return f"Particle {self.id} at position {self.position} with velocity {self.velocity}."
-        else:
-            return f"Dead Particle {self.id} at position {self.position} with velocity {self.velocity}."
-
-    def __repr__(self) -> str:
-        ''' Debug statement for particles. '''
-        if self.alive==1:
-            return f"{self.__class__.__name__}({self.id},{self.position},{self.velocity})"
-        else:
-            return f"dead_{self.__class__.__name__}({self.id},{self.position},{self.velocity})"
-
-    # -------------------------------------------------------------------------
-    # Distance utilities
+    # Geometry
     
     '''
     Periodic boundaries -> We have to check different directions for shortest dist.
@@ -257,7 +246,6 @@ class Particle:
         # Map from angle back to 1D domain
         com_1d = com_angle * domain_length / (2*np.pi)
         return com_1d
-        
 
     @staticmethod
     def centre_of_mass_calc(iterable):
@@ -372,7 +360,14 @@ class Particle:
             self.torus_wrap()
     
     # -------------------------------------------------------------------------
-    # LOGGING
+    # Logging
+
+    def copy_state(self, new_object):
+        self.position = new_object.position
+        self.velocity = new_object.velocity
+        self.acceleration = new_object.acceleration
+        self.last_position = new_object.last_position
+        self.alive = new_object.alive
 
     def to_dict(self):
         new_dict = {
@@ -384,144 +379,10 @@ class Particle:
             "alive":self.alive
         }
         return new_dict
-    # -------------------------------------------------------------------------
-    # CSV utilities
-
     
-    @staticmethod
-    def write_state_to_csv():
-        '''
-        Takes Particle system state at the current time, and compresses into CSV.
-        Iterates through each class, and within that each class instance.
-        Calls each class's own method to write its own section.
-        '''
-        #--------------------------------
-        if not Particle.csv_path.endswith('.csv'):
-            Particle.csv_path += '.csv'
+    # -------------------------------------------------------------------------
+    # Matplotlib
 
-        # Compose CSV row entry
-        system_state_list = [Particle.current_step, Particle.current_time]
-
-        # Iterate through all current child classes
-        for classname in Particle.pop_counts_dict.keys():
-
-            # Access the class directly from the all_instances dictionary
-            class_instances = Particle.all.get(classname, {})
-
-            # Initialise class specific list
-            class_list = [classname, Particle.pop_counts_dict[classname]]
-
-            # Iterate through all instances of the child class
-            for child in class_instances.values():
-                if child.alive == 1:
-                    # Add instance info to list using its write_csv_list function
-                    class_list += child.write_csv_list()
-
-            # Add child class info to main list
-            class_list += ['|']
-            system_state_list += class_list
-
-        # End CSV row with 'END'
-        system_state_list += ['END']
-
-        # ------------------------------------
-        # Writing entry to file
-
-        if not os.path.exists(Particle.csv_path):
-            with open(Particle.csv_path, mode='w', newline='') as file:
-                writer = csv.writer(file)
-                header_row = ['Timestep', 'Time', 'ClassName', 'ClassPop', 'InstanceID', 'Attributes', '...','|','ClassName','...','|','END']
-                writer.writerow(header_row)
-                writer.writerow(system_state_list)
-        else:
-            with open(Particle.csv_path, mode='a', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow(system_state_list)
-
-    @staticmethod
-    def load_state_from_csv(timestep):
-        '''
-        Reads from a CSV containing the compressed Particle system state at a specific time.
-        Iterates through each class, and within that each class instance.
-        Parses to decompress the format outlined in write_state_to_csv.
-        '''
-        # ------------------------------------
-        # Read row from CSV
-
-        with open(Particle.csv_path, mode='r', newline='') as file:
-            # Loop through the CSV rows until reaching the desired row
-            # (This must be done since CSV doesn't have indexed data structure)
-            reader = csv.reader(file)
-            target_row_index = timestep+1 
-            for i, row in enumerate(reader):
-                if i == target_row_index:
-                    system_state_list = row.copy()
-                    break
-        
-        # ------------------------------------
-        # Parse row into a full Particle system state
-
-        # Parse timestep info, shift index
-        Particle.current_step, Particle.current_time = system_state_list[0], system_state_list[1]
-        idx_shift = 2
-
-        # Loop through blocks for each child class
-        while True:
-            # Check if reached the end of row
-            if system_state_list[idx_shift] == 'END':
-                break
-            
-            # Parse class and number of instances, shift index
-            classname = system_state_list[idx_shift]
-            class_pop = int(system_state_list[idx_shift+1])
-            idx_shift += 2
-
-            # Diagnostic print
-            #print(f"Timestep {timestep}, class_pop {class_pop}, classname {classname}")
-
-            # TODO: Note this structure is faulty - can't run if we start with 0 instances of a class
-            if class_pop == 0:
-                # Remove all instances from current system
-                Particle.pop_counts_dict[classname] = 0
-                Particle.max_ids_dict[classname] = -1
-                Particle.all[classname] = {}
-            else:
-                '''
-                # Search for existing instances
-                existing_id = None
-                for key, value in Particle.all[classname].items():
-                    existing_id = key
-                if existing_id is not None:
-                    # We have a valid instance, clone it into prototype for future use
-                    prototype = copy.copy(Particle.all[classname][existing_id])
-                    Particle.prototypes[classname] = prototype
-                '''
-                # Cull everything and start again with prototype, rebuild with CSV info
-                Particle.pop_counts_dict[classname] = 0
-                Particle.max_ids_dict[classname] = -1
-                Particle.all[classname] = {}
-                prototype = Particle.prototypes[classname]
-
-                # Create class_pop many clones by looping through CSV row
-                for i in range(class_pop):
-                    id = int(system_state_list[idx_shift])
-                    # Clone our prototype with it's child class's create_instance method
-                    child = prototype.create_instance(id=id)
-
-                    # Assign attributes by reading the system_state_list for that class
-                    # This calls to child class's method to read each instance
-                    idx_shift = child.read_csv_list(system_state_list, idx_shift)
-                    
-                # Check for pipe | at the end, then move past it
-                if system_state_list[idx_shift] != '|':
-                    raise IndexError(f"Something wrong with parsing, ~ column {idx_shift}.")
-            
-            # Move on to next class by shifting over pipe character '|'
-            idx_shift += 1
-
-    # ===============================================================
-
-    # MATPLOTLIB
     def remove_from_plot_plt(self):
         # Use matplotlib .remove() method which works on all artists
         try:
@@ -584,25 +445,6 @@ class Particle:
         return self.plt_artists
 
 
-
-
-
-
-
-
-
-
-
-# ------------------------------------------------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------------------------------------------------
-
-
-
-
-
-
-
 class Environment:
     '''
     Class containing details about the simulation environment, walls etc
@@ -631,9 +473,6 @@ class Environment:
         centre = np.array([0.5*Particle.env_x_lim, 0.5*Particle.env_y_lim])
         term = np.min(centre)
         return centre + (position - com) * 0.8 * term/scale #* 1/scale
-    
-
-    
 
 class Wall(Environment):
     '''
@@ -648,7 +487,15 @@ class Wall(Environment):
         self.line_colour = line_colour
         self.edge_colour = edge_colour
     
-    # Getters for simple attributes
+    # -------------------------------------------------------------------------
+    # Printing
+    
+    def __str__(self) -> str:
+        return f"Wall_[{self.a_position}]_[{self.b_position}]."
+    
+    # -------------------------------------------------------------------------
+    # Geometry
+    
     @property
     def wall_vec(self):
         return self.b_position - self.a_position
@@ -663,9 +510,6 @@ class Wall(Environment):
         rot = np.array([[0,-1],
                         [1, 0]])
         return np.matmul(rot, self.wall_vec)
-
-    def __str__(self) -> str:
-        return f"Wall_[{self.a_position}]_[{self.b_position}]."
     
     def dist_to_wall(self, particle: Particle):
         '''
@@ -706,14 +550,10 @@ class Wall(Environment):
         projection = a + t * vec
         x_to_wall = projection - x
         return np.sqrt(np.sum(x_to_wall**2)), -x_to_wall
-    
-    def copy_state(self, new_object):
-        self.a_position = new_object.a_position
-        self.b_position = new_object.b_position
-        self.line_colour = new_object.line_colour
-        self.edge_colour = new_object.edge_colour
 
-    # LOGGING
+    # -------------------------------------------------------------------------
+    # Logging
+
     def to_dict(self):
         parent_dict = super().to_dict()
         new_dict = {
@@ -733,9 +573,15 @@ class Wall(Environment):
                    unlinked=True)
         return instance 
     
+    def copy_state(self, new_object):
+        self.a_position = new_object.a_position
+        self.b_position = new_object.b_position
+        self.line_colour = new_object.line_colour
+        self.edge_colour = new_object.edge_colour
+
     # -------------------------------------------------------------------------
-    
-    # ---- MATPLOTLIB ----
+    # Matplotlib
+
     def draw_plt(self, ax:plt.Axes, com=None, scale=None):
         '''
         Updates the stored self.plt_artist PathCollection with new position
@@ -770,9 +616,15 @@ class Target(Environment):
         self.capture_thresh = capture_radius**2
         self.colour = colour
 
+    # -------------------------------------------------------------------------
+    # Printing
+
     def __str__(self) -> str:
         return f"Target_[{self.position}]_[{self.capture_thresh}]]."
     
+    # -------------------------------------------------------------------------
+    # Geometry
+
     @classmethod
     def find_closest_target(cls, particle):
         closest_target = None
@@ -783,12 +635,9 @@ class Target(Environment):
                 closest_target = target
         return closest_target
 
-    def copy_state(self, new_object):
-        self.position = new_object.position
-        self.capture_thresh = new_object.capture_thresh
-        self.colour = new_object.colour
+    # -------------------------------------------------------------------------
+    # Logging
 
-    # LOGGING
     def to_dict(self):
         parent_dict = super().to_dict()
         new_dict = {
@@ -806,9 +655,14 @@ class Target(Environment):
         instance.capture_thresh=new_dict["capture_thresh"]
         return instance
     
+    def copy_state(self, new_object):
+        self.position = new_object.position
+        self.capture_thresh = new_object.capture_thresh
+        self.colour = new_object.colour
+
     # -------------------------------------------------------------------------
-    
-    # ---- MATPLOTLIB ----
+    # Matplotlib
+
     def draw_plt(self, ax:plt.Axes, com=None, scale=None):
         '''
         Updates the stored self.plt_artist PathCollection with new position

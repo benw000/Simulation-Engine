@@ -1,12 +1,11 @@
 import numpy as np
 
 from simulation_engine.utils.errors import SimulationEngineInputError
-from .parents import Particle
+from simulation_engine.classes import Particle
 from simulation_engine.utils.manager import Manager
 
-# =====================================================================================
-
-# ---- SETUP ----
+# -------------------------------------------------------------------------
+# Setup
 
 def setup(args):
     """
@@ -35,7 +34,7 @@ def setup(args):
         return manager
 
 def setup_run(args, manager):
-    # ---- VALIDATE ARGS ----
+    # Setup args
     if not len(args.nums) == 1:
         raise SimulationEngineInputError("(-n, --nums) Please supply 1 argument only for population when using springs simulation type")
     
@@ -89,8 +88,6 @@ class Solid(Particle):
     links_count = 0
     links_dict = {}
 
-    
-    # Initialisation
     def __init__(self, position: np.ndarray = None, velocity: np.ndarray = None, unlinked=None) -> None:
         '''
         Initialises a solid object, inheriting from the Particle class.
@@ -152,50 +149,8 @@ class Solid(Particle):
         return 0
 
     # -------------------------------------------------------------------------
-    # CSV utilities
+    # Logging
 
-    # TODO: Move to legacy script
-    # def write_csv_list(self):
-    #     '''
-    #     Format for compressing each Solid instance into CSV.
-    #     '''
-    #     # Individual child instance info
-    #     rest = ['*', self.position[0], self.position[1], \
-    #             self.last_position[0],self.last_position[1],
-    #             self.velocity[0], self.velocity[1],
-    #             self.acceleration[0], self.acceleration[1] ]
-    #     # Add connected links after id and before rest
-    #     return [self.id, '*'] + self.connected_list + rest
-
-    # def read_csv_list(self, system_state_list, idx_shift):
-    #     '''
-    #     Format for parsing the compressed Solid instances from CSV.
-    #     '''
-    #     # Pass over starting '*'
-    #     idx_shift += 2
-
-    #     # Iterate through connected list
-    #     self.connected_list = []
-    #     while True:
-    #         if system_state_list[idx_shift] == '*':
-    #             break
-    #         self.connected_list += [int(system_state_list[idx_shift])]
-    #         idx_shift += 1
-
-    #     # Read the rest idx_shift = 0 corresponds to '*'
-    #     self.position = np.array([float(system_state_list[idx_shift+1]), \
-    #                                 float(system_state_list[idx_shift+2])])
-    #     self.last_position = np.array([float(system_state_list[idx_shift+3]), \
-    #                                 float(system_state_list[idx_shift+4])])
-    #     self.velocity = np.array([float(system_state_list[idx_shift+5]), \
-    #                                 float(system_state_list[idx_shift+6])])
-    #     self.acceleration = np.array([float(system_state_list[idx_shift+7]), \
-    #                                 float(system_state_list[idx_shift+8])])
-        
-    #     # Update idx shift to next id and return
-    #     return idx_shift+9
-    
-    # NDJSON
     def to_dict(self):
         new_dict = super().to_dict()
         new_dict["connected_list"] = self.connected_list
@@ -211,8 +166,8 @@ class Solid(Particle):
         instance.connected_list = dict["connected_list"]
         instance.alive = dict["alive"]
     
-     # -------------------------------------------------------------------------
-    # Animation utilities
+    # -------------------------------------------------------------------------
+    # Matplotlib
 
     def draw_plt(self, ax, com=None, scale=None):
         ''' 
@@ -262,7 +217,6 @@ class Solid(Particle):
             
             # Plot main point on top (use higher zorder)
             self.plt_artists.append(ax.scatter(plot_position[0],plot_position[1],s=size,c='b', zorder=1000+self.id))
-
         else:
             # Plot all links
             for idx, other_id in enumerate(self.connected_list):
