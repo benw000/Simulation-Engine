@@ -2,6 +2,7 @@ import numpy as np
 
 from simulation_engine.classes import Particle, Wall, Target
 from simulation_engine.utils.manager import Manager
+from simulation_engine.utils.errors import SimulationEngineInputError
 
 # -------------------------------------------------------------------------
 # Setup
@@ -34,6 +35,10 @@ def setup(args):
         return manager
     
 def setup_run(args, manager):
+    # Validate args
+    if not len(args.nums) == 1:
+        raise SimulationEngineInputError("(-n, --nums) Please only supply 1 argument for population when using pool simulation type")
+    
     # Set Particle geometry attributes
     Particle.track_com = False
     Particle.torus = False
