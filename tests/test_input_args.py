@@ -1,8 +1,9 @@
 import unittest
 from unittest.mock import patch
+from rich import print
+
 from simulation_engine_entrypoint import IMPLEMENTED_TYPES, INTERACTIVE_SUPPORTED_TYPES
 from simulation_engine_entrypoint import main as entrypoint_main
-from simulation_engine.utils.errors import SimulationEngineInputError
 
 class TestInputArgs(unittest.TestCase):
     entry_script = "simulation_engine_entrypoint.py"
@@ -81,6 +82,38 @@ class TestInputArgs(unittest.TestCase):
                 # Fail test if no error thrown
                 else:
                     self.fail(f"Invalid input {args_list} did not raise an error")
+
+    # ------------------------------------------------------
+    # Good input combinations
+
+    TYPE_DEFAULT_NUMS = {
+        "nbody":["10"],
+        "birds":["10", "2"],
+        "springs":["200"],
+        "pool":["10"],
+        "evac":["30"],
+    }
+
+    def _generate_good_input_combinations(self):
+        good_inputs_list = []
+        # Run all modes to check working
+        for sim_type in IMPLEMENTED_TYPES:
+            good_inputs_list.append(
+                ["run", sim_type, "--display", "False", "-n"]+self.TYPE_DEFAULT_NUMS[sim_type])
+        return good_inputs_list
+    
+    def test_good_inputs(self):
+        """
+        Function to integration test each valid CLI input
+        """
+        # Get good inputs
+        good_inputs_list = self._generate_good_input_combinations()
+        for args_list in good_inputs_list:
+            print("Checking arguments:", args_list)
+            # Call main with bad inputs
+            with patch("sys.argv", [self.entry_script]+args_list):
+                entrypoint_main()
+
 
 if __name__=="__main__":
     unittest.main()

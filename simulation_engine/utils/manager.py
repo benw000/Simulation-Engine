@@ -116,6 +116,9 @@ class Manager:
             vid_path = default_vid_path
         self.vid_path = vid_path
 
+        # Display
+        self.display_bool = args.display
+
         # ---- Unpack other arguments ----
         self.show_graph = show_graph
         if draw_backdrop_plt_func:
@@ -406,12 +409,14 @@ class Manager:
             print("\n")
             print(f"Saved simulation as mp4 at {self.vid_path}.")
             # Display video
-            self.display_rendered_video()
+            if self.display_bool:
+                self.display_rendered_video()
         else:
             print("Now rendering frames for each time step - [italic]not displaying real time[/italic]")
             print("")
             # 4. Play video on loop
-            plt.show()            
+            if self.display_bool:
+                plt.show()            
 
     # ---- FIGURE SETUP ----
     def setup_figure_plt(self):

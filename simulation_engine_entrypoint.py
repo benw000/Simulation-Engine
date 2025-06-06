@@ -246,6 +246,8 @@ def parse_args():
     parser.add_argument('--vid_name', type=validate_filename_arg,   help="Custom video name (not path) for MP4 video", default=None)
     parser.add_argument('--vid_folder', type=str, help="Custom folder to store MP4 video in", default=None)
     parser.add_argument('--vid_path', type=validate_filepath_arg,   help="Custom file path for MP4 video", default=None)
+    # Display after
+    parser.add_argument('--display', type=str2bool, help="Whether to display the final rendered simulation, default True", default=True)
 
     # Return parsed arguments
     return parser.parse_args()
