@@ -1,12 +1,19 @@
 import unittest
 from unittest.mock import patch
 from unittest import main
-from simulation_engine_entrypoint import IMPLEMENTED_TYPES
+from simulation_engine_entrypoint import IMPLEMENTED_TYPES, INTERACTIVE_SUPPORTED_TYPES
 from simulation_engine.utils.errors import SimulationEngineInputError
 
-class TestSimulationEngineEntrypoint(unittest.TestCase):
+class TestInputArgs(unittest.TestCase):
     entry_script = "simulation_engine_entrypoint.py"
     print_func = "simulation_engine_entrypoint.print"
+
+    # Common error types reference
+    ERROR_CODES_LOOKUP = {
+        "Success":0,
+        "General Error":1,
+        "Bad shell args":2,
+    }
 
     # ------------------------------------------------------
     # Bad input combinations
@@ -15,33 +22,57 @@ class TestSimulationEngineEntrypoint(unittest.TestCase):
         """
         Generates bad input arguments for use in test_bad_input_combinations
         """
-        # TODO
-        raise NotImplementedError
-        # eg ["--name", "Alice"]
+        bad_path = "@/\//.@@"
+        # Create list of lists
+        bad_inputs_list = [
+            ["run"],
+            ["load"],
+            ["load", "-i"],
+            ["run", IMPLEMENTED_TYPES[0], "-t", -1],
+            ["run", IMPLEMENTED_TYPES[0], "-d", -0.1],
+            ["run", IMPLEMENTED_TYPES[0], "-n", 0.5],
+            ["run", IMPLEMENTED_TYPES[0], "-n", -1],
+            ["run", IMPLEMENTED_TYPES[0], "-c", "false"],
+            ["run", IMPLEMENTED_TYPES[0], "-l", "false"],
+            ["run", IMPLEMENTED_TYPES[0], "--log_path", "foo/bar.json", "--log_name", "bar.ndjson"]
+            ["run", IMPLEMENTED_TYPES[0], "--log_path", "foo/bar.json", "--log_folder", "foo"]
+            ["run", IMPLEMENTED_TYPES[0], "--log_path", bad_path],
+            ["run", IMPLEMENTED_TYPES[0], "--log_name", bad_path],
+            ["run", IMPLEMENTED_TYPES[0], "--log_folder", bad_path],
+            ["run", IMPLEMENTED_TYPES[0], "--vid_path", "foo/bar.mp4", "--vid_name", "bar.mp4"]
+            ["run", IMPLEMENTED_TYPES[0], "--vid_path", "foo/bar.mp4", "--vid_folder", "foo"]
+            ["run", IMPLEMENTED_TYPES[0], "--vid_path", bad_path],
+            ["run", IMPLEMENTED_TYPES[0], "--vid_name", bad_path],
+            ["run", IMPLEMENTED_TYPES[0], "--vid_folder", bad_path],
+        ]
+        # Run without number
+        bad_inputs_list += [["run", sim_type] for sim_type in IMPLEMENTED_TYPES]
+
+        # Load without log_path
+        bad_inputs_list += [["load", sim_type] for sim_type in IMPLEMENTED_TYPES]
+
+        # Unsupported interactive type
+        bad_inputs_list += [["run", sim_type] for sim_type in IMPLEMENTED_TYPES if sim_type not in INTERACTIVE_SUPPORTED_TYPES]
+
+
+        return bad_inputs_list
 
     def test_bad_input_combinations(self):
         """
-        Factory function to create test cases for each bad input argument
+        Function to test each set of bad input arguments
         """
         # Get bad inputs
-        inputs_list = self._generate_bad_input_combinations()
-        for args_list in inputs_list:
-            # Create function
-            @patch("sys.argv", [self.entry_script]+args_list)
-            def test_missing_args(self):
-                # Call main and collect errors
-                # TODO: Allow argparse error or custom error
+        bad_inputs_list = self._generate_bad_input_combinations()
+        for args_list in bad_inputs_list:
+            print("Checking arguments:", args_list)
+            # Call main with bad inputs
+            with patch("sys.argv", [self.entry_script]+args_list):
+                # Track exceptions raised in context manager
                 with self.assertRaises(SystemExit) as cm:
+                    # Call entrypoint with patch arguments
                     main.main()
-                self.assertEqual(cm.exception.code, 2)
-    
-    @patch("sys.argv", [self.entry_script]+args_list)
-    def test_correct_input(self):
-        # Redirect calls to rich print --> mock print object
-        with patch(self.print_func) as mock_print:
-            # Call main 
-            main.main()
-
+            # Check that script wasn't successfull
+            self.assertNotEqual(cm.exception.code, self.ERROR_CODES_LOOKUP["Success"])
 
 if __name__=="__main__":
     unittest.main()
