@@ -107,7 +107,7 @@ def validate_memory_args(args):
     vid = args.vid
 
     # If not in sync mode, must store some sort of history
-    if sync and not cache and not log:
+    if not sync and not cache and not log:
         raise SimulationEngineInputError(f"If not running in sync mode (-s), then at least one of caching (-c, --cache) or logging (-l, --log) must be true. Otherwise can't store a history to draw back on.")
 
 def validate_filepath_args(args):
@@ -210,39 +210,7 @@ def get_type(args):
 
     return line_dict["type"]
 
-# ---- MAIN ---
-def main(args):
-    """
-    Main entrypoint function for Simulation Engine.
-    Does the following:
-    1. Validates user-supplied arguments in args
-    2. Sets up a Manager instance to oversee running, 
-       referencing a setup function in SETUP_FUNC_DICT
-    3. Tells the Manager to start
-
-    Args:
-        args (argparse.Namespace): Namespace containing input arguments
-
-    Raises:
-        NotImplementedError: If a feature hasn't been implemented
-        SimulationEngineInputError: If supplied arguments clash
-    """
-    # ---- VALIDATE INPUTS ----
-    validate_mode_args(args)
-    validate_setup_args(args)
-    validate_memory_args(args)
-    validate_filepath_args(args)
-
-    # ---- SETUP MANAGER ----
-    args.type = get_type(args)
-    setup_func =  SETUP_FUNC_DICT[args.type]
-    manager: Manager = setup_func(args)
-    manager.print_settings_table()
-    
-    # ---- RUN MANAGER ----
-    manager.start()
-
-if __name__=="__main__":
+def parse_args():
     # Create the argument parser
     parser = argparse.ArgumentParser(description="General Simulation Engine input options.")
     
@@ -279,8 +247,43 @@ if __name__=="__main__":
     parser.add_argument('--vid_folder', type=str, help="Custom folder to store MP4 video in", default=None)
     parser.add_argument('--vid_path', type=validate_filepath_arg,   help="Custom file path for MP4 video", default=None)
 
-    # Parse the arguments
-    args = parser.parse_args()
+    # Return parsed arguments
+    return parser.parse_args()
+
+def main():
+    """
+    Main entrypoint function for Simulation Engine.
+    Does the following:
+    1. Get user-supplied arguments
+    2. Validates arguments
+    3. Sets up a Manager instance to oversee running, 
+       referencing a setup function in SETUP_FUNC_DICT
+    4. Tells the Manager to start
+
+    Args:
+        args (argparse.Namespace): Namespace containing input arguments
+
+    Raises:
+        NotImplementedError: If a feature hasn't been implemented
+        SimulationEngineInputError: If supplied arguments clash
+    """
+    # ---- GET INPUTS ----
+    args = parse_args()
+
+    # ---- VALIDATE INPUTS ----
+    validate_mode_args(args)
+    validate_setup_args(args)
+    validate_memory_args(args)
+    validate_filepath_args(args)
+
+    # ---- SETUP MANAGER ----
+    args.type = get_type(args)
+    setup_func =  SETUP_FUNC_DICT[args.type]
+    manager: Manager = setup_func(args)
+    manager.print_settings_table()
     
-    # Call the main function with parsed arguments
-    main(args)
+    # ---- RUN MANAGER ----
+    manager.start()
+
+if __name__=="__main__":
+    main()
