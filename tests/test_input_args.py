@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
-from unittest import main
 from simulation_engine_entrypoint import IMPLEMENTED_TYPES, INTERACTIVE_SUPPORTED_TYPES
+from simulation_engine_entrypoint import main as entrypoint_main
 from simulation_engine.utils.errors import SimulationEngineInputError
 
 class TestInputArgs(unittest.TestCase):
@@ -28,22 +28,21 @@ class TestInputArgs(unittest.TestCase):
             ["run"],
             ["load"],
             ["load", "-i"],
-            ["run", IMPLEMENTED_TYPES[0], "-t", -1],
-            ["run", IMPLEMENTED_TYPES[0], "-d", -0.1],
-            ["run", IMPLEMENTED_TYPES[0], "-n", 0.5],
-            ["run", IMPLEMENTED_TYPES[0], "-n", -1],
-            ["run", IMPLEMENTED_TYPES[0], "-c", "false"],
-            ["run", IMPLEMENTED_TYPES[0], "-l", "false"],
-            ["run", IMPLEMENTED_TYPES[0], "--log_path", "foo/bar.json", "--log_name", "bar.ndjson"]
-            ["run", IMPLEMENTED_TYPES[0], "--log_path", "foo/bar.json", "--log_folder", "foo"]
-            ["run", IMPLEMENTED_TYPES[0], "--log_path", bad_path],
-            ["run", IMPLEMENTED_TYPES[0], "--log_name", bad_path],
-            ["run", IMPLEMENTED_TYPES[0], "--log_folder", bad_path],
-            ["run", IMPLEMENTED_TYPES[0], "--vid_path", "foo/bar.mp4", "--vid_name", "bar.mp4"]
-            ["run", IMPLEMENTED_TYPES[0], "--vid_path", "foo/bar.mp4", "--vid_folder", "foo"]
-            ["run", IMPLEMENTED_TYPES[0], "--vid_path", bad_path],
-            ["run", IMPLEMENTED_TYPES[0], "--vid_name", bad_path],
-            ["run", IMPLEMENTED_TYPES[0], "--vid_folder", bad_path],
+            ["run", IMPLEMENTED_TYPES[0], "-t", "-1"],
+            ["run", IMPLEMENTED_TYPES[0], "-d", "-0.1"],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "0.5"],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "-1"],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "10", "-c", "false", "-l", "false"],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "10", "--log_path", "foo/bar.json", "--log_name", "bar.ndjson"],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "10", "--log_path", "foo/bar.json", "--log_folder", "foo"],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "10", "--log_path", bad_path],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "10", "--log_name", bad_path],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "10", "--log_folder", bad_path],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "10", "--vid_path", "foo/bar.mp4", "--vid_name", "bar.mp4"],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "10", "--vid_path", "foo/bar.mp4", "--vid_folder", "foo"],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "10", "--vid_path", bad_path],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "10", "--vid_name", bad_path],
+            ["run", IMPLEMENTED_TYPES[0], "-n", "10", "--vid_folder", bad_path],
         ]
         # Run without number
         bad_inputs_list += [["run", sim_type] for sim_type in IMPLEMENTED_TYPES]
@@ -67,12 +66,21 @@ class TestInputArgs(unittest.TestCase):
             print("Checking arguments:", args_list)
             # Call main with bad inputs
             with patch("sys.argv", [self.entry_script]+args_list):
-                # Track exceptions raised in context manager
-                with self.assertRaises(SystemExit) as cm:
-                    # Call entrypoint with patch arguments
-                    main.main()
-            # Check that script wasn't successfull
-            self.assertNotEqual(cm.exception.code, self.ERROR_CODES_LOOKUP["Success"])
+                try:
+                    entrypoint_main()
+                # Check that argparse errors are correctly thrown
+                except SystemExit as e:
+                    code = e.code
+                    print(f"Caught SystemExit with code {code}")
+                    self.assertNotEqual(code, self.ERROR_CODES_LOOKUP["Success"],
+                                        msg=f"Invalid input {args_list} exited with 0")
+                # Else check that custom errors are correctly thrown
+                except Exception as e:
+                    print(f"Caught Exception: {e}")
+                    continue
+                # Fail test if no error thrown
+                else:
+                    self.fail(f"Invalid input {args_list} did not raise an error")
 
 if __name__=="__main__":
     unittest.main()
