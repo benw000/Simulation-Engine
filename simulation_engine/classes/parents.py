@@ -389,10 +389,6 @@ class Particle:
             for artist in self.plt_artists:
                 artist.remove()
         except Exception as e:
-            # # Debug
-            # print("Error moving particle:",self)
-            # print(e)
-            # print("Plot artists list:", self.plt_artists)
             pass
         # Reset artists as None:
         # Next loop, plt_artists will be reinitialised from None inside plot
@@ -473,6 +469,18 @@ class Environment:
         centre = np.array([0.5*Particle.env_x_lim, 0.5*Particle.env_y_lim])
         term = np.min(centre)
         return centre + (position - com) * 0.8 * term/scale #* 1/scale
+    
+    def remove_from_plot_plt(self):
+        # Use matplotlib .remove() method which works on all artists
+        try:
+            for artist in self.plt_artists:
+                artist.remove()
+        except Exception as e:
+            pass
+        # Reset artists as None:
+        # Next loop, plt_artists will be reinitialised from None inside plot
+        self.plt_artists = None
+        return []
 
 class Wall(Environment):
     '''
