@@ -151,11 +151,21 @@ class Manager:
             Particle: Different instances of child classes of Particle
         """
         for class_name, class_dict in self.state["Particle"].items():
-            # TODO: Does list() change anything here?
             for particle in list(class_dict.values()):
                 yield particle
+    
+    def iterate_all_environments(self):
+        """
+        Generator to yield all environments.
 
-    def rich_progress(self, iterable, description: str = "Working"):
+        Yields:
+            Environment: Different instances of child classes of Environment
+        """
+        for class_name, class_list in self.state["Environment"].items():
+            for environment in list(class_list):
+                yield environment
+
+    def rich_progress(self, iterable, description: str = "Working", console=None):
         """
         Wraps an iterable with a Rich module progress bar that displays [iteration / total].
 
@@ -169,6 +179,9 @@ class Manager:
         # Get total length
         total = len(iterable) if hasattr(iterable, "__len__") else None
         
+        # Get console singleton
+        self.console = console or Console()
+
         # Make columns
         with Progress(
             TextColumn("[progress.description]{task.description}"),
@@ -176,6 +189,7 @@ class Manager:
             BarColumn(),
             TaskProgressColumn(),  # Shows % complete
             TimeRemainingColumn(),
+            console=self.console,
         ) as progress:
             task = progress.add_task(description, total=total)
             for item in iterable:
@@ -183,7 +197,7 @@ class Manager:
                 progress.update(task, advance=1)
     
     def print_settings_table(self):
-        console = Console()
+        self.console = Console()
         long_line_divide = "[dim]" + "─" * 40 + "[/dim]"
         short_line_divide = "[dim]" + "─" * 20 + "[/dim]"
         table = Table(title="[bold]Selected Settings ⚙️[/bold]")
@@ -208,7 +222,7 @@ class Manager:
         table.add_row("🎞️  MP4 video path", "--vid_path\n OR --vid_name\n OR --vid_folder", f"{self.vid_path}")
 
         print("")
-        console.print(table)
+        self.console.print(table)
         print("")
 
     # ---- STATE LOADING UTILITIES----
@@ -293,8 +307,6 @@ class Manager:
             self.history.append(deepcopy(self.state))
         if self.write_log:
             self.logger.append_current_state(self.state)
-        # print("Starting state")
-        # print(self.state)
 
         # 1. Compute first if asynchronous
         if not self.sync_compute_and_rendering:
@@ -307,9 +319,7 @@ class Manager:
             # Reset to first step's state
             self.copy_state(self.get_state_at_timestep(0))
             self.current_time = 0
-            self.current_step = 0 # -1
-            # print("Re-reading first state")
-            # print(self.state)
+            self.current_step = 0
         
         # 2. Split by rendering framework
         if self.render_framework == "matplotlib":
@@ -350,10 +360,22 @@ class Manager:
         self.current_time += self.delta_t
         self.current_step += 1
 
-        # TODO: Update kill records - would need to do from particle child 
-
         # Store state in history
         if self.cache_history:
+            if self.sync_compute_and_rendering:
+                '''
+                Matplotlib Spines objects (axes) can't be deepcopied.
+                If in sync mode, each particle/environment will have artists drawn, 
+                and each artist references its parent axes. 
+                So we reset plt.artists = None for each plottable object,
+                and remove the artists from the existing axis.
+                This is a regrettable work-around but avoids major architecture changes.
+                '''
+                for particle in self.iterate_all_particles():
+                    particle.remove_from_plot_plt()
+                for environment in self.iterate_all_environments():
+                    environment.remove_from_plot_plt()
+
             self.history.append(deepcopy(self.state))
 
         # Write to file
@@ -389,7 +411,7 @@ class Manager:
         # Create a zero-argument init_func inside a scope that can see our desired arguments
         init_func_plt = self._make_init_func_plt(ax,ax2)
         # Compose object
-        animation = FuncAnimation(fig=fig, 
+        self.animation = FuncAnimation(fig=fig, 
                             func=self.draw_figure_plt,
                             init_func=init_func_plt,
                             frames=frames_iterator,
@@ -405,18 +427,22 @@ class Manager:
             # Make sure parent path exists
             self.vid_path.parent.mkdir(parents=True, exist_ok=True)
             fps = 1/self.delta_t # period -> frequency
-            animation.save(self.vid_path.absolute().as_posix(), writer='ffmpeg', fps=fps)
+            self.animation.save(self.vid_path.absolute().as_posix(), writer='ffmpeg', fps=fps)
             print("\n")
             print(f"Saved simulation as mp4 at {self.vid_path}.")
             # Display video
             if self.display_bool:
                 self.display_rendered_video()
+            else:
+                plt.close(fig)
         else:
             print("Now rendering frames for each time step - [italic]not displaying real time[/italic]")
             print("")
             # 4. Play video on loop
             if self.display_bool:
-                plt.show()            
+                plt.show()
+            else:
+                plt.close(fig)        
 
     # ---- FIGURE SETUP ----
     def setup_figure_plt(self):
@@ -542,6 +568,26 @@ class Manager:
         return init_func_plt
 
     # ---- MAIN CALLABLE ----
+    def terminate_on_error(method):
+        """
+        Decorator to stop Matplotlib FuncAnimation thread if error occurs.
+        (Without this, an error would occur at each timestep and flood the terminal!)
+
+        Args:
+            animation (plt.animation.FuncAnimation): Main animation object used for simulation
+        """
+        def wrapper(self, *args, **kwargs):
+            try:
+                return method(self, *args, **kwargs)
+            except Exception as e:
+                print(f"Error in matplotlib animation update function: {e}")
+                if hasattr(self, "animation") and self.animation:
+                    self.animation.event_source.stop()
+                plt.close("all")
+                raise
+        return wrapper
+    
+    @terminate_on_error
     def draw_figure_plt(self, timestep:int, ax:list[plt.Axes], ax2:list[plt.Axes]=None):
         """
         Main matplotlib timestep function called by a FuncAnimation object at each timestep.
