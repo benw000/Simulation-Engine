@@ -1,6 +1,9 @@
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 import unittest
 from unittest.mock import patch
-from rich import print
+import matplotlib.pyplot as plt
 
 from simulation_engine_entrypoint import IMPLEMENTED_TYPES, INTERACTIVE_SUPPORTED_TYPES
 from simulation_engine_entrypoint import main as entrypoint_main
@@ -23,7 +26,7 @@ class TestInputArgs(unittest.TestCase):
         """
         Generates bad input arguments for use in test_bad_input_combinations
         """
-        bad_path = "@/\//.@@"
+        bad_path = "./?`§\|...\<>"
         # Create list of lists
         bad_inputs_list = [
             ["run"],
@@ -95,11 +98,45 @@ class TestInputArgs(unittest.TestCase):
     }
 
     def _generate_good_input_combinations(self):
+        # Get base args to run in headless mode
+        def base_run_args(sim_type):
+            return ["run", sim_type, 
+                    "--display", "False",
+                    "--log_folder", "tests/data/Simulation_Logs/",
+                    "--vid_folder", "tests/data/Simulation_Videos",
+                    "-n", ]+self.TYPE_DEFAULT_NUMS[sim_type]
+        
+        # Initialise store
         good_inputs_list = []
-        # Run all modes to check working
+
+        # Loop over main logging/caching/synchronous modes
         for sim_type in IMPLEMENTED_TYPES:
-            good_inputs_list.append(
-                ["run", sim_type, "--display", "False", "-n"]+self.TYPE_DEFAULT_NUMS[sim_type])
+            base = base_run_args(sim_type)
+            good_inputs_list += [
+                base,
+                base+["-s"],
+                base+["-c","False"],
+                base+["-l","False"],
+                base+["-s", "-c", "False"],
+                base+["-s", "-l", "False"],
+                base+["-s", "-c", "False", "-l", "False"]
+            ]
+            # For each type create a log, then load
+            log_path = f"tests/data/Simulation_Logs/{sim_type}_load_test.ndjson"
+            good_inputs_list += [
+                ["run", sim_type, 
+                "--display", "False",
+                "--log_path", log_path,
+                "-n", ]+self.TYPE_DEFAULT_NUMS[sim_type],
+                ["load", 
+                 "--display", "False",
+                 "--log_path", log_path]
+            ]
+            
+        # For each current one try rendering a video
+        for args_list in good_inputs_list.copy():
+            good_inputs_list.append(args_list+["-v"])
+        
         return good_inputs_list
     
     def test_good_inputs(self):
@@ -113,7 +150,14 @@ class TestInputArgs(unittest.TestCase):
             # Call main with bad inputs
             with patch("sys.argv", [self.entry_script]+args_list):
                 entrypoint_main()
-
-
+            # Reset matplotlib
+            plt.close('all')
+            print("Above arguments worked!\n")
+    
+        
 if __name__=="__main__":
     unittest.main()
+
+'''
+TODO: Update for interactive
+'''
