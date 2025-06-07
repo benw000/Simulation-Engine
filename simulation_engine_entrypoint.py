@@ -3,7 +3,7 @@ import json
 import argparse
 from rich import print
 from pathlib import Path
-from pathvalidate import validate_filepath
+from pathvalidate import validate_filepath, validate_filename
 from pathvalidate.argparse import validate_filename_arg, validate_filepath_arg
 
 import simulation_engine
@@ -153,7 +153,8 @@ def validate_filepath_args(args):
     # Log folder
     if log_folder:
         dummy_path = Path(log_folder).absolute() / "dummy.ndjson"
-        validate_filepath(dummy_path)
+        # Validate path based on Windows OS rules for stricter conventions
+        strict_filename_check(dummy_path)
 
     # Log chunk size
     if chunk_size < 0:
@@ -175,8 +176,9 @@ def validate_filepath_args(args):
 
     # Vid folder
     if vid_folder:
-        dummy_path = Path(vid_folder).absolute() / "dummy.mp4"
-        validate_filepath(dummy_path)
+        dummy_path = Path(vid_folder) / "dummy.mp4"
+        # Validate path based on Windows OS rules for stricter conventions
+        strict_filename_check(dummy_path)
 
     # Valid log path needed in load mode
     if mode == 'load':
@@ -190,6 +192,18 @@ def validate_filepath_args(args):
         if not Path(log_path).exists():
             raise SimulationEngineInputError(f"Supplied log path doesnt exist: {log_path}")
 
+def strict_filename_check(pathlike):
+    """
+    Validates each component of the path using Windows rules (catches bad characters),
+    but allows the full path to be Unix or Windows style.
+    """
+    p = Path(pathlike)
+    for part in p.parts:
+        if part not in ("/", ".", ".."):
+            # Strictly validate path components based on Windows OS rules
+            validate_filename(part, platform="windows")
+    # Make sure whole file path works on user's OS
+    validate_filepath(p, platform="auto")
 def get_type(args):
     # Early return for non-load modes
     mode = args.mode
@@ -282,10 +296,18 @@ def main():
     args.type = get_type(args)
     setup_func =  SETUP_FUNC_DICT[args.type]
     manager: Manager = setup_func(args)
-    manager.print_settings_table()
+    #manager.print_settings_table()
     
     # ---- RUN MANAGER ----
     manager.start()
+
+    # ---- CLEANUP ----
+    if hasattr(manager, "console"):
+        try:
+            manager.console.clear_live()
+        except Exception:
+            pass
+        del manager.console
 
 if __name__=="__main__":
     main()
