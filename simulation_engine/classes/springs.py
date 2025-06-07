@@ -165,6 +165,7 @@ class Solid(Particle):
         instance.last_position = np.array(dict["last_position"])
         instance.connected_list = dict["connected_list"]
         instance.alive = dict["alive"]
+        return instance
     
     # -------------------------------------------------------------------------
     # Matplotlib
