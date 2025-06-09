@@ -6,8 +6,7 @@ from pathlib import Path
 from pathvalidate import validate_filepath, validate_filename
 from pathvalidate.argparse import validate_filename_arg, validate_filepath_arg
 
-import simulation_engine
-from simulation_engine.classes import Manager
+import simulation_engine.classes
 from simulation_engine.utils.errors import SimulationEngineInputError
 
 # ---- TO BE MAINTAINED ----
@@ -295,7 +294,7 @@ def main():
     # ---- SETUP MANAGER ----
     args.type = get_type(args)
     setup_func =  SETUP_FUNC_DICT[args.type]
-    manager: Manager = setup_func(args)
+    manager = setup_func(args)
     #manager.print_settings_table()
     
     # ---- RUN MANAGER ----
