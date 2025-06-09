@@ -1,16 +1,36 @@
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
+import os
+import shutil
+import matplotlib as mpl
 import unittest
+import subprocess
 from unittest.mock import patch
 import matplotlib.pyplot as plt
 
-from simulation_engine_entrypoint import IMPLEMENTED_TYPES, INTERACTIVE_SUPPORTED_TYPES
-from simulation_engine_entrypoint import main as entrypoint_main
-
+import simulation_engine.main.simulation_engine_entrypoint 
+from simulation_engine.main.simulation_engine_entrypoint import IMPLEMENTED_TYPES, INTERACTIVE_SUPPORTED_TYPES
+from simulation_engine.main.simulation_engine_entrypoint import main as entrypoint_main
 class TestInputArgs(unittest.TestCase):
-    entry_script = "simulation_engine_entrypoint.py"
-    print_func = "simulation_engine_entrypoint.print"
+    # @classmethod
+    # def setUpClass(cls):
+    #     # Try to find ffmpeg
+    #     print("ENV PATH:", os.environ.get("PATH"))
+    #     ffmpeg_path = shutil.which("ffmpeg")
+    #     if not ffmpeg_path:
+    #         # Try common locations manually (optional)
+    #         fallback_paths = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg","/Applications/anaconda3/bin/ffmpeg"]
+    #         for path in fallback_paths:
+    #             if os.path.exists(path):
+    #                 os.environ["PATH"] += os.pathsep + os.path.dirname(path)
+    #                 ffmpeg_path = shutil.which("ffmpeg")
+    #                 break
+    #     if not ffmpeg_path:
+    #         raise RuntimeError(f"ffmpeg not found. Please install it and ensure it's on your PATH.\nENV PATH: {os.environ.get('PATH')}")
+    #     mpl.rcParams["animation.ffmpeg_path"] = ffmpeg_path
+
+    ENTRY_SCRIPT = simulation_engine.main.simulation_engine_entrypoint.__file__
 
     # Common error types reference
     ERROR_CODES_LOOKUP = {
@@ -69,7 +89,7 @@ class TestInputArgs(unittest.TestCase):
         for args_list in bad_inputs_list:
             print("Checking arguments:", args_list)
             # Call main with bad inputs
-            with patch("sys.argv", [self.entry_script]+args_list):
+            with patch("sys.argv", [self.ENTRY_SCRIPT]+args_list):
                 try:
                     entrypoint_main()
                 # Check that argparse errors are correctly thrown
@@ -148,10 +168,11 @@ class TestInputArgs(unittest.TestCase):
         for args_list in good_inputs_list:
             print("Checking arguments:", args_list)
             # Call main with bad inputs
-            with patch("sys.argv", [self.entry_script]+args_list):
-                entrypoint_main()
+            try:
+                subprocess.run(['python', self.ENTRY_SCRIPT]+args_list)
+            except subprocess.CalledProcessError as e:
+                raise e
             # Reset matplotlib
-            plt.close('all')
             print("Above arguments worked!\n")
     
         
