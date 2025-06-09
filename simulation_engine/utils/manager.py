@@ -1,22 +1,33 @@
 import cv2
 import json
+import shutil
+import sys
+import os
 import argparse
 from pathlib import Path
 from copy import deepcopy
 from datetime import datetime
+from tqdm import tqdm
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.gridspec import GridSpec
+
+# Check if ffmpeg is available on PATH, and tell matplotlib to use it
+ffmpeg_path = shutil.which("ffmpeg")
+if not ffmpeg_path:
+    sys.exit("Error: ffmpeg not found on system PATH. Please install ffmpeg and try again.")
+import matplotlib as mpl
+mpl.rcParams['animation.ffmpeg_path'] = ffmpeg_path
 
 from rich import print
 from rich.table import Table
 from rich.console import Console
 from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn, TaskProgressColumn
 
-from simulation_engine.classes.parents import Particle, Environment, Wall, Target
-from simulation_engine.utils.errors import SimulationEngineInputError
-
+from simulation_engine.classes.parents import Particle, Environment
 
 class Manager:
     '''
@@ -71,7 +82,7 @@ class Manager:
             self.delta_t: float = args.deltat
         self.current_time = 0
         self.current_step = 0
-        self.done_computing = False
+        self.done_rendering = False
         self.just_looped = False
 
         # Cache, log, sync bool flags
@@ -95,7 +106,6 @@ class Manager:
             log_path = Path(args.log_folder) / default_log_name
         else:
             log_path = default_log_path
-        # Such nice logic 🥹
 
         # Initialise Logger
         self.logger = Logger(manager=self, log_path=log_path, chunk_size=args.log_read_chunk_size)
@@ -118,6 +128,9 @@ class Manager:
 
         # Display
         self.display_bool = args.display
+
+        # Console
+        self.console = Console()
 
         # ---- Unpack other arguments ----
         self.show_graph = show_graph
@@ -180,7 +193,7 @@ class Manager:
         total = len(iterable) if hasattr(iterable, "__len__") else None
         
         # Get console singleton
-        self.console = console or Console()
+        self.console = console or Console() #force_terminal=True
 
         # Make columns
         with Progress(
@@ -281,6 +294,7 @@ class Manager:
             else:
                 # Assuming we can just copy
                 self.state[key] = val
+
     # =============================================================
 
     # ---- MAIN PIPELINE OPERATIONS ----
@@ -310,8 +324,7 @@ class Manager:
 
         # 1. Compute first if asynchronous
         if not self.sync_compute_and_rendering:
-            for timestep in self.rich_progress(range(self.num_steps), description=f"[bold]Computation Progress[/bold]"):
-                # print(f"----- Computation Progress: {self.current_step} / {self.num_steps} -----" ,end="\r", flush=True)
+            for timestep in tqdm(range(self.num_steps), desc=f"Computation Progress", initial=1):
                 self.update()
             print("")
             print("[cyan]Finished Computing![/cyan] 🥸")
@@ -334,9 +347,13 @@ class Manager:
         """
         # 1. Read log for metadata
         # Load the first state to get delta_t, env_x_lim, env_y_lim, track_com and torus
-        self.state = self.get_state_at_timestep(1)
+        self.state = self.get_state_at_timestep(0)
         # Get number of lines as num steps
         self.num_steps = len(self.logger.offset_indices) - 1
+
+        # Settings
+        self.sync_compute_and_rendering = False
+        self.interactive = False
 
         # 2. Split by rendering framework
         if self.render_framework == "matplotlib":
@@ -379,7 +396,7 @@ class Manager:
             self.history.append(deepcopy(self.state))
 
         # Write to file
-        if self.write_log and not self.done_computing:
+        if self.write_log and not self.done_rendering:
             self.logger.append_current_state(self.state)
 
     # =============================================================
@@ -404,7 +421,7 @@ class Manager:
         # 2. Create a matplotlib FuncAnimation object which timesteps draw_figure_plt
         interval_between_frames = self.delta_t*1000 # milliseconds
         # Wrap the frames iterator in a custom rich progress bar
-        frames_iterator = self.rich_progress(range(self.num_steps),description="[bold]Rendering Progress[/bold]")
+        frames_iterator = tqdm(range(self.num_steps),desc="Rendering Progress", initial=1)
         #frames_iterator = range(self.num_steps)
         # Tried blit=True with returned artists collected recursively by draw_figure_plt, couldn't get working.
         blit = False
@@ -424,6 +441,7 @@ class Manager:
         # 3. Split based on save video
         if self.save_video:
             print("Now rendering simulation frame by frame")
+            print("")
             # Make sure parent path exists
             self.vid_path.parent.mkdir(parents=True, exist_ok=True)
             fps = 1/self.delta_t # period -> frequency
@@ -512,7 +530,7 @@ class Manager:
         self.draw_backdrop_plt_func(ax)
 
         # 4. Add title
-        if self.done_computing:
+        if self.done_rendering:
             window_title = f"Simulation Engine [{self.simulation_type}] | Step: {self.current_step}/{self.num_steps} | Time: {round(self.current_time,2)}s"
         else:
             window_title = f"RENDERING - Please do not quit! | Step: {self.current_step}/{self.num_steps}"
@@ -616,7 +634,8 @@ class Manager:
         self._load_state_at_timestep_plt(timestep)
 
         # Print current frame - this will usually be silenced by rich progress bar until rendering done
-        print(f"--> [italic]Displaying Frame[/italic][{self.current_step} / {self.num_steps}]" ,end="\r", flush=True)
+        if self.done_rendering:
+            print(f"--> [italic]Displaying Frame[/italic][{self.current_step} / {self.num_steps}]" ,end="\r", flush=True)
 
         # 3. Draw frame and graph onto existing axes, return artists
         artists = []
@@ -636,8 +655,8 @@ class Manager:
         """
         # Reset after loop
         if self.just_looped:
-            if not self.done_computing:
-                self.done_computing = True
+            if not self.done_rendering:
+                self.done_rendering = True
                 print("")
                 print("[green]Finished Rendering![/green] 🐸")
                 print("")
@@ -664,7 +683,7 @@ class Manager:
             timestep (_type_): _description_
         """
         if self.sync_compute_and_rendering and \
-            (not self.done_computing or \
+            (not self.done_rendering or \
             (not self.cache_history and not self.write_log)):
             # Synchronous - we compute while rendering
             self.update()                
@@ -693,7 +712,7 @@ class Manager:
         # 1. Add figure, ax titles
         normal_title = f"Simulation Engine [{self.simulation_type}] | Step: {self.current_step}/{self.num_steps} | Time: {round(self.current_time,2)}s"
         render_title = f"RENDERING - Please do not quit! | Step: {self.current_step}/{self.num_steps}"
-        if self.done_computing:
+        if self.done_rendering:
             window_title = normal_title
         else:
             window_title = render_title
@@ -867,7 +886,14 @@ class Logger:
         # Initialise log file
         if self.manager.write_log:
             self.log_path.parent.mkdir(parents=True, exist_ok=True)
-            self.log_path.touch()
+            # If in run mode, remove and start again
+            if self.manager.mode == 'run':
+                if self.log_path.exists():
+                    os.remove(self.log_path)
+                self.log_path.touch()
+            # If in load mode, path must exist
+            elif self.manager.mode == 'load' and not self.log_path.exists():
+                raise FileExistsError(f"Log path {log_path} not found!")
     
     # =============================================================
 
