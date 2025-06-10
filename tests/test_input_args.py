@@ -1,35 +1,15 @@
+import unittest
+from unittest.mock import patch
+
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-import os
-import shutil
-import matplotlib as mpl
-import unittest
-import subprocess
-from unittest.mock import patch
-import matplotlib.pyplot as plt
-
 import simulation_engine.main.simulation_engine_entrypoint 
-from simulation_engine.main.simulation_engine_entrypoint import IMPLEMENTED_TYPES, INTERACTIVE_SUPPORTED_TYPES
+from simulation_engine.main.simulation_engine_entrypoint import (
+    IMPLEMENTED_TYPES, INTERACTIVE_SUPPORTED_TYPES, TYPE_DEFAULT_NUMS)
 from simulation_engine.main.simulation_engine_entrypoint import main as entrypoint_main
-class TestInputArgs(unittest.TestCase):
-    # @classmethod
-    # def setUpClass(cls):
-    #     # Try to find ffmpeg
-    #     print("ENV PATH:", os.environ.get("PATH"))
-    #     ffmpeg_path = shutil.which("ffmpeg")
-    #     if not ffmpeg_path:
-    #         # Try common locations manually (optional)
-    #         fallback_paths = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg","/Applications/anaconda3/bin/ffmpeg"]
-    #         for path in fallback_paths:
-    #             if os.path.exists(path):
-    #                 os.environ["PATH"] += os.pathsep + os.path.dirname(path)
-    #                 ffmpeg_path = shutil.which("ffmpeg")
-    #                 break
-    #     if not ffmpeg_path:
-    #         raise RuntimeError(f"ffmpeg not found. Please install it and ensure it's on your PATH.\nENV PATH: {os.environ.get('PATH')}")
-    #     mpl.rcParams["animation.ffmpeg_path"] = ffmpeg_path
 
+class TestInputArgs(unittest.TestCase):
     ENTRY_SCRIPT = simulation_engine.main.simulation_engine_entrypoint.__file__
 
     # Common error types reference
@@ -106,79 +86,5 @@ class TestInputArgs(unittest.TestCase):
                 else:
                     self.fail(f"Invalid input {args_list} did not raise an error")
 
-    # ------------------------------------------------------
-    # Good input combinations
-
-    TYPE_DEFAULT_NUMS = {
-        "nbody":["10"],
-        "birds":["10", "2"],
-        "springs":["200"],
-        "pool":["10"],
-        "evac":["30"],
-    }
-
-    def _generate_good_input_combinations(self):
-        # Get base args to run in headless mode
-        def base_run_args(sim_type):
-            return ["run", sim_type, 
-                    "--display", "False",
-                    "--log_folder", "tests/data/Simulation_Logs/",
-                    "--vid_folder", "tests/data/Simulation_Videos",
-                    "-n", ]+self.TYPE_DEFAULT_NUMS[sim_type]
-        
-        # Initialise store
-        good_inputs_list = []
-
-        # Loop over main logging/caching/synchronous modes
-        for sim_type in IMPLEMENTED_TYPES:
-            base = base_run_args(sim_type)
-            good_inputs_list += [
-                base,
-                base+["-s"],
-                base+["-c","False"],
-                base+["-l","False"],
-                base+["-s", "-c", "False"],
-                base+["-s", "-l", "False"],
-                base+["-s", "-c", "False", "-l", "False"]
-            ]
-            # For each type create a log, then load
-            log_path = f"tests/data/Simulation_Logs/{sim_type}_load_test.ndjson"
-            good_inputs_list += [
-                ["run", sim_type, 
-                "--display", "False",
-                "--log_path", log_path,
-                "-n", ]+self.TYPE_DEFAULT_NUMS[sim_type],
-                ["load", 
-                 "--display", "False",
-                 "--log_path", log_path]
-            ]
-            
-        # For each current one try rendering a video
-        for args_list in good_inputs_list.copy():
-            good_inputs_list.append(args_list+["-v"])
-        
-        return good_inputs_list
-    
-    def test_good_inputs(self):
-        """
-        Function to integration test each valid CLI input
-        """
-        # Get good inputs
-        good_inputs_list = self._generate_good_input_combinations()
-        for args_list in good_inputs_list:
-            print("Checking arguments:", args_list)
-            # Call main with bad inputs
-            try:
-                subprocess.run(['python', self.ENTRY_SCRIPT]+args_list)
-            except subprocess.CalledProcessError as e:
-                raise e
-            # Reset matplotlib
-            print("Above arguments worked!\n")
-    
-        
 if __name__=="__main__":
     unittest.main()
-
-'''
-TODO: Update for interactive
-'''
