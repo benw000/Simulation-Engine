@@ -18,6 +18,13 @@ SETUP_FUNC_DICT = {
     "springs": simulation_engine.classes.springs.setup,
     "pool": simulation_engine.classes.pool.setup
 }
+TYPE_DEFAULT_NUMS = {
+        "nbody":["10"],
+        "birds":["10", "2"],
+        "springs":["200"],
+        "pool":["10"],
+        "evac":["30"],
+}
 # Track implementations
 IMPLEMENTED_TYPES = ["nbody", "birds", "springs", "pool", "evac"]
 INTERACTIVE_SUPPORTED_TYPES = []
