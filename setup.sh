@@ -7,7 +7,7 @@ echo "Requirements installed!"
 
 # 2. Setup alias to entrypoint script
 ALIAS_NAME="simulation"
-SCRIPT_NAME="simulation_engine_entrypoint.py"
+SCRIPT_NAME="simulation_engine/main/simulation_engine_entrypoint.py"
 # Get parent path from this script's pwd
 SCRIPT_PARENT_PATH="$(cd "$(dirname "$0")"; pwd)"
 SCRIPT_PATH="$SCRIPT_PARENT_PATH/$SCRIPT_NAME"

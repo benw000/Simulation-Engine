@@ -442,21 +442,17 @@ class Manager:
         
         # 3. Split based on save video
         if self.save_video:
-            print("Now rendering simulation frame by frame")
             # Make sure parent path exists
             self.vid_path.parent.mkdir(parents=True, exist_ok=True)
             fps = 1/self.delta_t # period -> frequency
             self.animation.save(self.vid_path.absolute().as_posix(), writer='ffmpeg', fps=fps)
-            print("\n")
-            print(f"Saved simulation as mp4 at {self.vid_path}.")
+            print(f"\nSaved simulation as mp4 at {self.vid_path}.")
             # Display video
             if self.display_bool:
                 self.display_rendered_video()
             else:
                 plt.close(fig)
         else:
-            print("Now rendering frames for each time step - [italic]not displaying real time[/italic]")
-            print("")
             # 4. Play video on loop
             if self.display_bool:
                 plt.show()
