@@ -1,19 +1,22 @@
+import os
+import sys
 import cv2
 import json
 import shutil
-import sys
-import os
 import argparse
+from tqdm import tqdm
 from pathlib import Path
 from copy import deepcopy
 from datetime import datetime
-from tqdm import tqdm
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
+
+from rich import print
+from rich.table import Table
+from rich.console import Console
+from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn, TaskProgressColumn
 
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 from matplotlib.gridspec import GridSpec
+from matplotlib.animation import FuncAnimation
 
 # Check if ffmpeg is available on PATH, and tell matplotlib to use it
 ffmpeg_path = shutil.which("ffmpeg")
@@ -22,10 +25,9 @@ if not ffmpeg_path:
 import matplotlib as mpl
 mpl.rcParams['animation.ffmpeg_path'] = ffmpeg_path
 
-from rich import print
-from rich.table import Table
-from rich.console import Console
-from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn, TaskProgressColumn
+# Hide user warnings
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 from simulation_engine.classes.parents import Particle, Environment
 
@@ -441,7 +443,6 @@ class Manager:
         # 3. Split based on save video
         if self.save_video:
             print("Now rendering simulation frame by frame")
-            print("")
             # Make sure parent path exists
             self.vid_path.parent.mkdir(parents=True, exist_ok=True)
             fps = 1/self.delta_t # period -> frequency
