@@ -519,13 +519,13 @@ class Wall(Environment):
                         [1, 0]])
         return np.matmul(rot, self.wall_vec)
     
-    def dist_to_wall(self, particle: Particle):
+    def dist_to_wall(self, particle_position):
         '''
         Function taking a wall and particle with position.
         Returns the particle's closest distance to the wall, and the vector
         pointing from wall to particle (direction of repulsion force).
         '''
-        x = particle.position
+        x = particle_position
         a = self.a_position
         b = self.b_position
         vec = self.wall_vec # b-a

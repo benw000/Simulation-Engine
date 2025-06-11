@@ -216,7 +216,7 @@ class Human(Particle):
         since we need to incorporate increasingly complicated heuristic forces to replicate intelligent behaviour.
         '''
         # Get distance and direction to current target
-        wall_dist, wall_dirn = wall.dist_to_wall(self)
+        wall_dist, wall_dirn = wall.dist_to_wall(self.position)
         wall_normal = wall.perp_vec
         target_dist, target_dirn = self.dist(self.my_target, return_both=True)
         # Get the angle between the particle<->target line and the normal to the wall
@@ -269,7 +269,7 @@ class Human(Particle):
 
         # Repulsion from walls - scales with 1/d^2
         for wall in self.manager.state["Environment"]["Wall"]:
-            dist, dirn = wall.dist_to_wall(self)
+            dist, dirn = wall.dist_to_wall(self.position)
             if dist < self.wall_dist_thresh:
                 force_term += dirn * (self.wall_repulsion/(dist))
                 # Make Humans smart - repel sideways if vector to target is directly blocked by wall

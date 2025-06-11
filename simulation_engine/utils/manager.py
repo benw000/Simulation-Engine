@@ -131,9 +131,6 @@ class Manager:
         # Display
         self.display_bool = args.display
 
-        # Console
-        self.console = Console()
-
         # ---- Unpack other arguments ----
         self.show_graph = show_graph
         if draw_backdrop_plt_func:
@@ -283,8 +280,8 @@ class Manager:
                         else:
                             self.state[key][child_class_name][id] = deepcopy(child)
                     # Remove remaining existing IDs if they dont appear
-                    for id in existing_child_class_dict.keys():
-                        if id not in child_class_dict.keys():
+                    for id in list(existing_child_class_dict.keys()):
+                        if id not in list(child_class_dict.keys()):
                             self.state[key][child_class_name].pop(id)
 
             elif key == "Environment": # Uses list

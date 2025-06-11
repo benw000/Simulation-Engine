@@ -223,7 +223,7 @@ class Pool(Particle):
 
         # Reflection from walls - in range, walls act like stiff springs
         for wall in self.manager.state["Environment"]["Wall"]:
-            dist, _ = wall.dist_to_wall(self)
+            dist, _ = wall.dist_to_wall(self.position)
             if dist < 0.5*self.diameter: # 1 radius to wall -> collision F = ke try 1
                 compression = self.diameter - dist
                 force_term += wall.perp_vec * self.k_wall * compression*0.8
