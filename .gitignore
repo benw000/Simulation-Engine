@@ -5,5 +5,7 @@ Simulation_Logs/
 __pycache__
 todo.md
 .vscode/
-venv
+venv/
+testenv/
 old_version/
+*.egg-info/
