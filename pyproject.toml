@@ -1,5 +1,5 @@
 [project]
-name = "a-sample-project"
+name = "bengine"
 version = "1.0.0"
 description = "Simulation Engine" # TODO
 authors = [{name="Ben Winstanley", email="benjamin.winstanley.007@gmail.com"}]
