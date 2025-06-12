@@ -7,15 +7,15 @@ Ben Winstanley
 
 <table>
   <tr> 
-    <td><img src="https://github.com/benw000/Simulation-Engine/blob/main/demo_videos/pool_demo.gif" alt="Pool tile" width = "300"/></td>
+    <td><img src=data/demo_videos/pool_demo.gif alt="Pool tile" width = "300"/></td>
   </tr>
   <tr>
-    <td><img src="https://github.com/benw000/Simulation-Engine/blob/main/demo_videos/evac_no_graph_demo.gif" alt="Evac tile" width="300"/></td>
-    <td><img src="https://github.com/benw000/Simulation-Engine/blob/main/demo_videos/springs_demo.gif" alt="Springs tile" width="300"/></td>
+    <td><img src=data/demo_videos/evac_no_graph_demo.gif alt="Evac tile" width="300"/></td>
+    <td><img src=data/demo_videos/springs_demo.gif alt="Springs tile" width="300"/></td>
   </tr>
   <tr>
-    <td><img src="https://github.com/benw000/Crowd-Simulation/blob/main/demo_videos/birds_demo.gif" alt="Birds tile" width="300"/></td>
-    <td><img src="https://github.com/benw000/Crowd-Simulation/blob/main/demo_videos/nbody_demo.gif" alt="Nbody tile" width="300"/></td>
+    <td><img src=data/demo_videos/birds_demo.gif alt="Birds tile" width="300"/></td>
+    <td><img src=data/demo_videos/nbody_demo.gif alt="Nbody tile" width="300"/></td>
   </tr>
 </table>
 
@@ -33,7 +33,7 @@ This is an active project - I'm still working on new systems, as well as working
 
 ### 8-ball pool breaking simulation
 
-![pool-gif](https://github.com/benw000/Simulation-Engine/blob/main/demo_videos/pool_demo.gif)
+![pool-gif](data/demo_videos/pool_demo.gif)
 
 Run this : ```python general_simulation.py --type pool --steps 500 ```
 
@@ -47,7 +47,7 @@ Pool balls are initialised in the normal setup, the cue ball starting off firing
 ### Classroom Evacuation Model
 
 
-![evac-gif](https://github.com/benw000/Crowd-Simulation/blob/main/demo_videos/evac_demo.gif)
+![evac-gif](data/demo_videos/evac_demo.gif)
 
 Run this :  ``` python general_simulation.py --type evac --num 40 --steps 200 ```
 
@@ -65,7 +65,7 @@ People are initialised at random points in the classroom, and make their way to 
 
 ### Spring System Model
 
-![springs-gif](https://github.com/benw000/Simulation-Engine/blob/main/demo_videos/springs_demo.gif)
+![springs-gif](data/demo_videos/springs_demo.gif)
 
 Run this :  ``` python general_simulation.py --type springs --num 50  --steps 30 ```
 
@@ -80,7 +80,7 @@ Point particles are initialised at random positions on the plane; if a neighbour
 
 ### Predator-Prey Model
 
-![birds-gif](https://github.com/benw000/Crowd-Simulation/blob/main/demo_videos/birds_demo.gif)
+![birds-gif](data/demo_videos/birds_demo.gif)
 
 Run this :  ``` python general_simulation.py --type birds --num 50 --num2 5 --steps 200```
 
@@ -97,7 +97,7 @@ Prey (white) and predator (red) birds are initialised at random points. The pred
 ### N-body Gravitational Dynamics
 
 
-![nbody-gif](https://github.com/benw000/Crowd-Simulation/blob/main/demo_videos/nbody_demo.gif)
+![nbody-gif](data/demo_videos/nbody_demo.gif)
 
 Run this : ``` python general_simulation.py --type nbody --num 30 --steps 100 ```
 
