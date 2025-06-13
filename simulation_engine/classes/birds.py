@@ -15,8 +15,6 @@ def setup(args):
     Args:
         args (argparse.Namespace): argparse namespace of user supplied arguments
     """
-    if args.deltat is None:
-        args.deltat=Particle.DEFAULT_TIMESTEP
     # Create manager instance
     manager = Manager(args = args, 
                       show_graph = False,
@@ -60,10 +58,6 @@ def draw_backdrop_plt(ax):
     Args:
         ax (plt.Axes): Main matplotlib frame
     """
-    # Set padded limits
-    ax.set_xlim(-1, Particle.env_x_lim+1)
-    ax.set_ylim(-1, Particle.env_y_lim+1)
-
     # Black background
     ax.set_facecolor('skyblue')
 

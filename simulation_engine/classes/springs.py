@@ -61,10 +61,6 @@ def draw_backdrop_plt(ax):
     Args:
         ax (plt.Axes): Main matplotlib frame
     """
-    # Set padded limits
-    ax.set_xlim(-1, Particle.env_x_lim+1)
-    ax.set_ylim(-1, Particle.env_y_lim+1)
-
     # Black background
     ax.set_facecolor('white')
 

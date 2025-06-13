@@ -20,10 +20,10 @@ class Particle:
 
     # Bools for tracking COM or torus points
     track_com: bool = False
-    torus = False
+    torus: bool = False
     
     # Default timestep
-    DEFAULT_TIMESTEP = 0.01
+    DEFAULT_TIMESTEP: float = 0.01
     
     # Initialisation function
     def __init__(self,
@@ -448,9 +448,12 @@ class Environment:
     manager = None
     def __init__(self, unlinked=False):
         # Add self to manager
+        class_name = self.__class__.__name__
         if not unlinked:
-            self.manager.state["Environment"][self.__class__.__name__].append(self)
-
+            if class_name in self.manager.state["Environment"]:
+                self.manager.state["Environment"][class_name].append(self)
+            else:
+                self.manager.state["Environment"][class_name] = [self]
         # Initialise artists
         self.plt_artists = None
 

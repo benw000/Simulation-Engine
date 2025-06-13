@@ -15,12 +15,13 @@ def setup(args):
     Args:
         args (argparse.Namespace): argparse namespace of user supplied arguments
     """
+    # Default timestep
     if args.deltat is None:
         args.deltat=Human.DEFAULT_TIMESTEP
-    show_graph = True
+
     # Create manager instance
     manager = Manager(args = args, 
-                      show_graph = show_graph,
+                      show_graph = True,
                       draw_backdrop_plt_func = draw_backdrop_plt,
                       draw_graph_plt_func = draw_graph_plt)
     
@@ -28,8 +29,6 @@ def setup(args):
     manager.class_objects_registry["Human"] = Human
     manager.class_objects_registry["Wall"] = Wall 
     manager.class_objects_registry["Target"] = Target
-    manager.state["Environment"]["Wall"] = []
-    manager.state["Environment"]["Target"] = []
 
     # Split by mode
     if args.mode == 'run':
@@ -87,10 +86,6 @@ def draw_backdrop_plt(ax):
     Args:
         ax (plt.Axes): Main matplotlib frame
     """
-    # Set padded limits
-    ax.set_xlim(-1, Particle.env_x_lim+1)
-    ax.set_ylim(-1, Particle.env_y_lim+1)
-
     # White background
     ax.set_facecolor('w')
     return ax

@@ -79,7 +79,7 @@ class Manager:
         # Time
         self.num_steps: int = args.steps
         if args.deltat is None:
-            self.delta_t = 0.01
+            self.delta_t = Particle.DEFAULT_TIMESTEP
         else:
             self.delta_t: float = args.deltat
         self.current_time = 0
@@ -507,8 +507,8 @@ class Manager:
             fig.set_size_inches(width, height)
 
         # Initialise ax by plotting dimensions
-        ax.set_xlim(xmin=0,xmax=Particle.env_x_lim)
-        ax.set_ylim(ymin=0,ymax=Particle.env_x_lim)
+        ax.set_xlim(xmin=-1,xmax=Particle.env_x_lim+1)
+        ax.set_ylim(ymin=-1,ymax=Particle.env_x_lim+1)
 
         # 2. Set tight layout with invisible axes
         ax.spines['top'].set_visible(False)
@@ -740,10 +740,6 @@ class Manager:
         Args:
             ax (plt.Axes): Main plot frame axes
         """
-        # Default background for matplotlib frames if not specified by user
-        ax.set_xlim(-1, Particle.env_x_lim+1)
-        ax.set_ylim(-1, Particle.env_y_lim+1)
-
         # Black background
         ax.set_facecolor('k')
     

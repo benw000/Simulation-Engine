@@ -15,8 +15,10 @@ def setup(args):
     Args:
         args (argparse.Namespace): argparse namespace of user supplied arguments
     """
+    # Default timestep
     if args.deltat is None:
         args.deltat=Pool.DEFAULT_TIMESTEP
+
     # Create manager instance
     manager = Manager(args = args, 
                       show_graph = False,
@@ -26,8 +28,7 @@ def setup(args):
     manager.class_objects_registry["Pool"] = Pool
     manager.class_objects_registry["Wall"] = Wall
     manager.class_objects_registry["Target"] = Target
-    manager.state["Environment"]["Wall"] = []
-    manager.state["Environment"]["Target"] = []
+
     # Split by mode
     if args.mode == 'run':
         return setup_run(args, manager)
@@ -52,14 +53,10 @@ def draw_backdrop_plt(ax):
     # Get an ax from manager, and plot things on it related to this mode
     # Overrides Manager.default_draw_backdrop_plt
 
-    # Set padded limits
-    ax.set_xlim(-1, Particle.env_x_lim+1)
-    ax.set_ylim(-1, Particle.env_y_lim+1)
-
     # Black background
     ax.set_facecolor('lightgreen')
 
-    # TODO: Check these limits
+    # Set plot limits
     ax.set_xlim([-2*0.05, 2+2*0.05])
     ax.set_ylim([-2*0.05, 1+2*0.05])
 
