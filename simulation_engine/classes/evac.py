@@ -255,7 +255,7 @@ class Human(Particle):
                 force_term += self.target_attraction * dirn #/dist
 
         # Human repulsion force - currently scales with 1/d
-        for human in Human.iterate_class_instances():
+        for human in self.__class__.iterate_class_instances():
             if human == self:
                 continue
             elif self.dist(human) < self.personal_space:
