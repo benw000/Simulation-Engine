@@ -9,3 +9,4 @@ venv/
 testenv/
 old_version/
 *.egg-info/
+sandbox/

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# TODO:
+# Make this pip install upgrade then bengine package
+
 # 1. Install requirements
 echo "Installing Requirements from requirements.txt ..."
 pip install -r requirements.txt
