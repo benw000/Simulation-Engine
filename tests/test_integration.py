@@ -1,5 +1,6 @@
 import unittest
 import subprocess
+import shutil
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -12,6 +13,10 @@ class TestIntegration(unittest.TestCase):
     # Path to entrypoint
     ENTRY_SCRIPT = simulation_engine.main.simulation_engine_entrypoint.__file__
 
+    # Folders
+    LOGS_FOLDER = "tests/data/Simulation_Logs/"
+    VIDEOS_FOLDER = "tests/data/Simulation_Videos/"
+
     # Common error types reference
     ERROR_CODES_LOOKUP = {
         "Success":0,
@@ -23,8 +28,8 @@ class TestIntegration(unittest.TestCase):
             # Get base args to run in headless mode
             return ["run", sim_type, 
                     "--display", "False",
-                    "--log_folder", "tests/data/Simulation_Logs/",
-                    "--vid_folder", "tests/data/Simulation_Videos",
+                    "--log_folder", self.LOGS_FOLDER,
+                    "--vid_folder", self.VIDEOS_FOLDER,
                     "-n", ]+TYPE_DEFAULT_NUMS[sim_type]
     
     def _generate_quick_list(self):
@@ -89,6 +94,10 @@ class TestIntegration(unittest.TestCase):
         """
         Integration test to try each valid CLI input.
         """
+        # Empty old test output
+        shutil.rmtree(self.LOGS_FOLDER)
+        shutil.rmtree(self.VIDEOS_FOLDER)
+
         # Get list of input argument sets
         exhaustive = False
         if exhaustive:
@@ -110,8 +119,8 @@ class TestIntegration(unittest.TestCase):
 if __name__=="__main__":
     unittest.main()
 
-# TODO
 '''
+TODO
 Get pyproject setup with different dev installs
 Update for interactive
 '''
