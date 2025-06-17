@@ -1,12 +1,16 @@
-Simulation_CSVs/
-Simulation_mp4s/
+# User data
 Simulation_Videos/
 Simulation_Logs/
+
+# Caches
 __pycache__
-todo.md
-.vscode/
+
+# Virtual environments
 venv/
-testenv/
-old_version/
 *.egg-info/
-sandbox/
+
+# Private development folder
+_dev/
+
+# Misc
+.vscode/
