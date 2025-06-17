@@ -299,18 +299,9 @@ class Particle:
         # then translate origin to middle of plot
         return ((self.position - com) * 0.8*minor_axis/scale) + plot_centre
     
-    def find_closest_target(self):
-        ''' Return Target object closest to self. '''
-        closest_target, closest_dist = None, np.inf
-        for target in self.manager.state["Environment"]["Target"]:
-            dist = self.dist(target)
-            if dist < closest_dist:
-                closest_dist = dist
-                closest_target = target
-        return closest_target
-    
     @property
     def theta(self):
+        ''' Particle's subtended angle from the x axis, then offset by 90 deg. '''
         return np.arctan2(self.velocity[1], self.velocity[0]) - np.pi/2
 
     # -------------------------------------------------------------------------
@@ -318,16 +309,16 @@ class Particle:
 
     def update(self):
         '''
-        - Uses 'Verlet Integration' timestepping method, predicting instance's position after a 
-            timestep using its current position, last position, and acceleration:
-            x_next = 2*x_now - x_last + acc*(dt)^2
-        - Passes predicted new position through checks, including speed limits,
-            and torus modulo function on coordinates.
+        Use Verlet Integration to update acceleration, velocity,
+        position and last_position of Particle.
+
+        x_next = 2*x_now - x_last + acc*(dt)^2
+        Passes predicted new position through checks, including speed limits,
+        and torus modulo function on coordinates, which may backtrack the new position.
         '''
-        # Let particle update its acceleration 
-        flag = self.update_acceleration()
-        if flag==1:
-            # i has been killed
+        # Let particle update its acceleration via child class methods
+        if self.update_acceleration():
+            # particle no longer alive
             return
 
         # Find last position from velocity - avoids torus wrapping problems
@@ -357,13 +348,16 @@ class Particle:
     # Logging
 
     def copy_state(self, new_object):
+        ''' Copy core attributes from one particle to the other'''
         self.position = new_object.position
         self.velocity = new_object.velocity
         self.acceleration = new_object.acceleration
         self.last_position = new_object.last_position
+        self.mass = self.mass
         self.alive = new_object.alive
 
     def to_dict(self):
+        ''' Compose dictionary of core particle attributes '''
         new_dict = {
             "position":self.position.tolist(),
             "last_position":self.last_position.tolist(),
@@ -378,6 +372,7 @@ class Particle:
     # Matplotlib
 
     def remove_from_plot_plt(self):
+        ''' Remove the particle's matplotlib artists from the axes they're registered to. '''
         # Use matplotlib .remove() method which works on all artists
         try:
             for artist in self.plt_artists:
@@ -391,9 +386,7 @@ class Particle:
 
     @staticmethod
     def create_triangle_plt(angle_rad):
-        '''
-        Create irregular triangle marker for plotting instances.
-        '''
+        ''' Create irregular triangle marker for plotting instances. '''
         # Define vertices for an irregular triangle (relative to origin)
         triangle = np.array([[-0.5, -1], [0.5, -1], [0.0, 1]])
         # Create a rotation matrix
@@ -403,7 +396,7 @@ class Particle:
         return triangle @ rotation_matrix.T
     
     def plot_as_triangle_plt(self, ax, com=None, scale=None, facecolor='white', plot_scale=1):
-        ''' Used by birds in Predator Prey simulation '''
+        ''' Plot particle with directional triangle. '''
         # Remove artist from plot if dead
         if not self.alive:
             return self.remove_from_plot_plt()
@@ -437,10 +430,13 @@ class Particle:
 
 class Environment:
     '''
-    Class containing details about the simulation environment, walls etc
+    Parent class for environmental obstacles in 2D plane
     '''
+    # Attributes
     manager = None
+
     def __init__(self, unlinked=False):
+        ''' Initialise an Environment object and add to manager's store. '''
         # Add self to manager
         class_name = self.__class__.__name__
         if not unlinked:
@@ -451,11 +447,18 @@ class Environment:
         # Initialise artists
         self.plt_artists = None
 
+    # -------------------------------------------------------------------------
+    # Logging
+
     def to_dict(self):
+        ''' Compose dictionary of core particle attributes. (Currently empty) '''
         new_dict = {
         }
         return new_dict
     
+    # -------------------------------------------------------------------------
+    # Matplotlib
+
     @staticmethod
     def orient_to_com(position:np.ndarray, com, scale):
         ''' Affine translation on point coordinates to prepare for plotting.  '''
@@ -468,6 +471,7 @@ class Environment:
         return centre + (position - com) * 0.8 * term/scale #* 1/scale
     
     def remove_from_plot_plt(self):
+        ''' Remove the particle's matplotlib artists from the axes they're registered to. '''
         # Use matplotlib .remove() method which works on all artists
         try:
             for artist in self.plt_artists:
@@ -481,7 +485,7 @@ class Environment:
 
 class Wall(Environment):
     '''
-    Encodes instance of a wall
+    Wall object characterised by directed line segment between two 2D points.
     '''
     DEFAULT_LINE_COLOUR = 'k'
     DEFAULT_EDGE_COLOUR = 'r'
@@ -560,6 +564,7 @@ class Wall(Environment):
     # Logging
 
     def to_dict(self):
+        ''' Compose dictionary of core attributes '''
         parent_dict = super().to_dict()
         new_dict = {
             "a_position":self.a_position.tolist(),
@@ -571,6 +576,7 @@ class Wall(Environment):
     
     @classmethod
     def from_dict(cls, new_dict):
+        ''' Create Wall instance from core attributes in dictionary. '''
         instance = cls(a_position=np.array(new_dict["a_position"]),
                    b_position=np.array(new_dict["b_position"]),
                    line_colour=new_dict["line_colour"],
@@ -579,6 +585,7 @@ class Wall(Environment):
         return instance 
     
     def copy_state(self, new_object):
+        ''' Copy core attributes from one Wall to the other'''
         self.a_position = new_object.a_position
         self.b_position = new_object.b_position
         self.line_colour = new_object.line_colour
@@ -632,11 +639,12 @@ class Target(Environment):
 
     @classmethod
     def find_closest_target(cls, particle):
-        closest_target = None
-        dist = 100*Particle.env_x_lim**2
+        ''' Return Target object closest to a given particle. '''
+        closest_target, closest_dist = None, np.inf
         for target in cls.manager.state["Environment"]["Target"]:
-            if np.linalg.norm(target.position - particle.position) < dist:
-                dist = np.linalg.norm(target.position - particle.position) 
+            dist = particle.dist(target)
+            if dist < closest_dist:
+                closest_dist = dist
                 closest_target = target
         return closest_target
 
@@ -644,6 +652,7 @@ class Target(Environment):
     # Logging
 
     def to_dict(self):
+        ''' Compose dictionary of core attributes '''
         parent_dict = super().to_dict()
         new_dict = {
             "position":self.position.tolist(),
@@ -654,6 +663,7 @@ class Target(Environment):
     
     @classmethod
     def from_dict(cls, new_dict):
+        ''' Create Target instance from core attributes in dictionary. '''
         instance = cls(position=np.array(new_dict["position"]),
                    colour=new_dict["colour"],
                    unlinked=True)
@@ -661,6 +671,7 @@ class Target(Environment):
         return instance
     
     def copy_state(self, new_object):
+        ''' Copy core attributes from one Target to the other'''
         self.position = new_object.position
         self.capture_thresh = new_object.capture_thresh
         self.colour = new_object.colour
