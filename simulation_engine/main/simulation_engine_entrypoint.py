@@ -17,7 +17,6 @@ SETUP_FUNC_DICT = {
     "nbody" : simulation_engine.classes.nbody.setup,
     "springs": simulation_engine.classes.springs.setup,
     "pool": simulation_engine.classes.pool.setup,
-    "pinball": simulation_engine.classes.pinball.setup,
 }
 TYPE_DEFAULT_NUMS = {
         "nbody":["10"],
@@ -25,10 +24,9 @@ TYPE_DEFAULT_NUMS = {
         "springs":["200"],
         "pool":["10"],
         "evac":["30"],
-        "pinball":["20"],
 }
 # Track implementations
-IMPLEMENTED_TYPES = ["nbody", "birds", "springs", "pool", "evac", "pinball"]
+IMPLEMENTED_TYPES = ["nbody", "birds", "springs", "pool", "evac"]
 INTERACTIVE_SUPPORTED_TYPES = []
 
 # ---- VALIDATION FUNCTIONS ----

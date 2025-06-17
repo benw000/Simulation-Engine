@@ -549,15 +549,15 @@ class Manager:
         com, scene_scale = None, None
         if Particle.track_com:
             com = Particle.centre_of_mass()
-            scene_scale = Particle.scene_scale()
+            scene_scale = Particle.scene_scale(com)
 
         # 2. Update particle and environment artists
         artists = []
         for environment_object_type, environment_objects_list in self.state["Environment"].items():
             for environment_object in environment_objects_list:
-                artists += environment_object.draw_plt(ax, com,scene_scale)
+                artists += environment_object.draw_plt(ax, com, scene_scale)
         for particle in self.iterate_all_particles():
-            artists += particle.draw_plt(ax, com,scene_scale)
+            artists += particle.draw_plt(ax, com, scene_scale)
         return artists
     
     def _make_init_func_plt(self, ax:list[plt.Axes], ax2:list[plt.Axes]=None):
@@ -722,7 +722,7 @@ class Manager:
         com, scene_scale = None, None
         if Particle.track_com:
             com = Particle.centre_of_mass()
-            scene_scale = Particle.scene_scale()
+            scene_scale = Particle.scene_scale(com)
 
         # 3. Update particle and environment artists
         artists = []
@@ -779,7 +779,7 @@ class Manager:
         # Draw all particle objects from state dictionary onto supplied Matplotlib.pyplot ax object
         artists = []
         for particle in self.iterate_all_particles():
-            artists += particle.draw_plt(ax, com,scene_scale)
+            artists += particle.draw_plt(ax, com, scene_scale)
         return []
     
     # ---- DRAW GRAPH ----
