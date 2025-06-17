@@ -283,31 +283,27 @@ class Particle:
     @staticmethod
     def scene_scale(com: np.ndarray):
         ''' Compute the maximum x or y distance a particle has from the COM. '''
-        # Call generator to find max dist from COM
         all_dists = []
         for instance in Particle.manager.iterate_all_alive_particles():
             all_dists.append((instance.position - com).tolist())
-        max_dist = np.max(all_dists)
-
-        return max_dist
+        return np.max(all_dists)
      
     def orient_to_com(self, com, scale):
         ''' Affine translation on point coordinates to prepare for plotting.  '''
         # Check both not None
         if com is None or scale is None:
             return self.position
-        # Transform
-        centre = np.array([0.5*Particle.env_x_lim, 0.5*Particle.env_y_lim])
-        term = np.min(centre)
-        return centre + (self.position - com) * 0.8 * term/scale #* 1/scale
+        plot_centre = np.array([0.5*Particle.env_x_lim, 0.5*Particle.env_y_lim])
+        minor_axis = np.min(plot_centre)
+        # Change particle to COM frame, scale by dist to furthest particle, 
+        # then translate origin to middle of plot
+        return ((self.position - com) * 0.8*minor_axis/scale) + plot_centre
     
     def find_closest_target(self):
-        # Check through list of targets
-        closest_target = None
-        closest_dist = 10**5
+        ''' Return Target object closest to self. '''
+        closest_target, closest_dist = None, np.inf
         for target in self.manager.state["Environment"]["Target"]:
-            vec = target.position - self.position
-            dist = np.linalg.norm(vec)
+            dist = self.dist(target)
             if dist < closest_dist:
                 closest_dist = dist
                 closest_target = target
