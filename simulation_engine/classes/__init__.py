@@ -7,4 +7,3 @@ from .evac import Human
 from .nbody import Star
 from .springs import Solid
 from .pool import Pool
-from .pinball import Pinball
