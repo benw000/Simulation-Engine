@@ -304,7 +304,7 @@ def main():
     args.type = get_type(args)
     setup_func =  SETUP_FUNC_DICT[args.type]
     manager = setup_func(args)
-    #manager.print_settings_table()
+    manager.print_settings_table()
     
     # ---- RUN MANAGER ----
     manager.start()

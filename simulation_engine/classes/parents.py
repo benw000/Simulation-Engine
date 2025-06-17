@@ -206,10 +206,6 @@ class Particle:
     def torus_wrap(self):
         ''' Wrap particle position coordinates into toroidal space with modulo functions'''
         self.position = self.position % [Particle.env_x_lim, Particle.env_y_lim]
-        # x,y = self.position
-        # x = x % Particle.env_x_lim
-        # y = y % Particle.env_y_lim
-        # self.position = np.array([x,y])
 
     @staticmethod
     def torus_1d_com(positions, masses, domain_length):
@@ -245,6 +241,10 @@ class Particle:
 
     @staticmethod
     def centre_of_mass_calc(iterable):
+        '''
+        Calculate COM of objects in an iterable with 'mass' and 'position' attributes.
+        Works for euclidean and toroidal spaces.
+        '''
         # Get masses and coordinates as arrays
         masses = []
         positions = []
@@ -272,16 +272,17 @@ class Particle:
 
     @classmethod
     def centre_of_mass_class(cls):
+        ''' Calculate COM of all class objects. '''
         return Particle.centre_of_mass_calc(cls.iterate_class_instances)
         
     @staticmethod
     def centre_of_mass():
+        ''' Calculate COM of all alive Particle objects. '''
         return Particle.centre_of_mass_calc(Particle.manager.iterate_all_alive_particles)
 
     @staticmethod
-    def scene_scale():
+    def scene_scale(com: np.ndarray):
         ''' Compute the maximum x or y distance a particle has from the COM. '''
-        com = Particle.centre_of_mass()
         # Call generator to find max dist from COM
         all_dists = []
         for instance in Particle.manager.iterate_all_alive_particles():
