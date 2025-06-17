@@ -2,15 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 from matplotlib.transforms import Affine2D
-from rich import print
 
 class Particle:
     '''
     Parent class for particles in a 2D plane
     '''
-    # -------------------------------------------------------------------------
-    # Attributes
-
     # Manager
     manager = None
 
@@ -43,48 +39,47 @@ class Particle:
 
         # Indexing for this instance
         if unlinked:
-            self.id = -1
+            self.id: int = -1
         else:
             self._initialise_instance_id()
 
         # Start alive
-        self.alive = True
+        self.alive: bool = True
 
         # ---- Motion ----
 
         # If no starting position given, assign random within 2D wall limits
         if position is None:
-            self.position = np.array([np.random.rand(1)[0]*(self.env_x_lim),np.random.rand(1)[0]*self.env_y_lim])
+            self.position: np.ndarray = np.array([np.random.rand(1)[0]*(self.env_x_lim),np.random.rand(1)[0]*self.env_y_lim])
         else:
-            self.position = position
+            self.position: np.ndarray = position
 
         # If no starting velocity given, set it to zero.
         if velocity is None:
-            self.velocity = np.zeros(2)
-            # Extract last position as being the same
-            self.last_position = self.position
+            self.velocity: np.ndarray = np.zeros(2)
         else:
-            self.velocity = velocity
-            # v = (current-last)/dt , so last = current - v*dt
-            self.last_position = self.position - self.velocity*self.manager.delta_t
+            self.velocity: np.ndarray = velocity
 
-        # Initialise acceleration as attribute, mass as 1
-        self.acceleration = np.zeros(2)
-        self.mass = 1
+        # Set last position via backtracking
+        self.last_position: np.ndarray = self.position - self.velocity*self.manager.delta_t
 
-        # Bools for hacky changes outside of force model
-        self.max_speed = None
-        self.just_reflected = False
+        # Initialise acceleration as zero, mass as 1
+        self.acceleration: np.ndarray = np.zeros(2)
+        self.mass: float = 1
+
+        # Bools for external corrections outside of force model
+        self.max_speed: float = None
+        self.just_reflected: bool = False
 
         # Matplotlib artists
-        self.plt_artists = None
+        self.plt_artists: list = None
 
     def _initialise_instance_id(self):
         # Get Child class name of current instance
         class_name = self.__class__.__name__
         
         # Get unused ID
-        self.id = self.manager.max_ids_dict.get(class_name, -1) + 1
+        self.id: int = self.manager.max_ids_dict.get(class_name, -1) + 1
 
         # Update max_ids_dict
         if class_name not in self.manager.max_ids_dict.keys():
@@ -125,10 +120,7 @@ class Particle:
             raise KeyError(f"Instance with id {id} not found in {cls.__name__}.")
         
     def unalive(self):
-        ''' 
-        Sets the class instance with this id to be not alive
-        '''
-        # Update alive
+        ''' Sets the class instance with this id to be not alive. '''
         self.alive = False
 
     @classmethod
@@ -140,7 +132,6 @@ class Particle:
             cls(Particle): All instances of cls
         """
         class_dict = cls.manager.state["Particle"].get(cls.__name__, {})
-        # TODO: Does list() change anything here?
         for particle in list(class_dict.values()):
             if particle.alive:
                 yield particle
@@ -157,11 +148,13 @@ class Particle:
             ---------
             x | x | x
     We work from top right, going clockwise.
+    TODO: Use more sophisticated approach by mapping to unit circle?
     '''
     up, right = np.array([0,env_y_lim]), np.array([env_x_lim,0])
     torus_offsets = [np.zeros(2), up+right, right, -up+right, -up, -up-right, -right, up-right, up]
 
     def torus_dist(self,other):
+        ''' Calculate distance, direction between particles in Toroidal space. '''
         directions = [(other.position + i) - self.position  for i in Particle.torus_offsets]
         distances = [np.sum(i**2) for i in directions]
         mindex = np.argmin(distances)
@@ -169,9 +162,9 @@ class Particle:
 
     def dist(self,other, return_both: bool = False):
         ''' 
-        Calculates SQUARED euclidean distance between particles.
-        Usage: my_dist = particle1.dist(particle2).
-        If Particle.torus, then finds shortest squared distance from set of paths.
+        Calculates SQUARED distance between particles.
+        Works for regular Euclidean space as well as toroidal.
+        If return_both then returns direction from self to other.
         '''
         if Particle.torus:
             dist, dirn = self.torus_dist(other)
@@ -186,34 +179,37 @@ class Particle:
             
     def unit_dirn(self,other) -> float:
         '''
-        Calculates the direction unit vector pointing from particle1 to particle2.
-        Usage: my_vec = particle1.dirn(particle2).
+        Calculates the direction unit vector pointing from self to other.
         '''        
         dist, dirn = self.dist(other,return_both=True)
         return dirn/np.sqrt(dist)
                
     def enforce_speed_limit(self):
-        ''' Hardcode normalise a particle's velocity to a specified max speed. '''
-        # Hardcode speed limit, restrict displacement
+        ''' 
+        Restrict magnitude of particle's velocity to its max speed.
+        Backtracks current position if over speed limit.
+        '''
         speed = np.sqrt(np.sum(self.velocity**2))
         if speed > self.max_speed:
-            # Change velocity
             self.velocity *= self.max_speed/speed
-            # Change current position to backtrack
             self.position = self.last_position + self.velocity*self.manager.delta_t
 
-    def inelastic_collision(self):
-        if self.just_reflected:
-            self.velocity *= 0.8
-            self.position = self.last_position + self.velocity*self.manager.delta_t
-            self.just_reflected = False
+    def inelastic_collision(self, scale_factor:float=0.8):
+        ''' 
+        Reduce magnitude of particle's velocity by given scale factor.
+        Backtracks current position.
+        '''
+        self.velocity *= scale_factor
+        self.position = self.last_position + self.velocity*self.manager.delta_t
+        self.just_reflected = False
 
     def torus_wrap(self):
-        ''' Wrap coordinates into Torus world with modulo functions'''
-        x,y = self.position
-        x = x % Particle.env_x_lim
-        y = y % Particle.env_y_lim
-        self.position = np.array([x,y])
+        ''' Wrap particle position coordinates into toroidal space with modulo functions'''
+        self.position = self.position % [Particle.env_x_lim, Particle.env_y_lim]
+        # x,y = self.position
+        # x = x % Particle.env_x_lim
+        # y = y % Particle.env_y_lim
+        # self.position = np.array([x,y])
 
     @staticmethod
     def torus_1d_com(positions, masses, domain_length):
@@ -353,7 +349,8 @@ class Particle:
             self.enforce_speed_limit()
 
         # Reduce speed after inelastic collision
-        self.inelastic_collision()
+        if self.just_reflected:
+            self.inelastic_collision()
 
         # Enforce torus wrapping
         if Particle.torus:
