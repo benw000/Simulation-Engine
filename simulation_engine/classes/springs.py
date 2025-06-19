@@ -48,7 +48,12 @@ def setup_run(args, manager):
     for i in range(args.nums[0]):
         Solid()
 
-    if not manager.state["Particle"].get("Solid", None):
+    # Create connections
+    for id, solid in manager.state["Particle"]["Solid"].items():
+        solid.get_connections()
+
+    # Check not empty
+    if not manager.state["Particle"].get("Solid", None) or Solid.links_count==0:
         print("No spring particles survived after initialisation. Please add more or change spring length!")
         exit()
     return manager
@@ -91,23 +96,26 @@ class Solid(Particle):
         super().__init__(position, velocity, unlinked)
         self.mass = 1
         self.connected_list = []
-        # Upon initialising new solid, link to points nearby
-        if not unlinked:
-            for other in Solid.iterate_class_instances():
-                if other is self:
+
+    def get_connections(self):
+        for other in Solid.iterate_class_instances():
+            if other is self:
+                continue
+            # Check distance is close enough to self
+            if self.dist(other) < self.spring_length * 1.2:
+                # Form link between self, other, check its not already in links_dict
+                link = sorted([self.id, other.id]) # Sort to make link unique
+                if link in Solid.links_dict.values():
                     continue
-                # Check distance is close enough to self
-                if self.dist(other) < self.spring_length * 1.2:
-                    # Form link between self, other, check its not already in links_dict
-                    link = sorted([self.id, other.id]) # Sort to make link unique
-                    if link in Solid.links_dict.values():
-                        continue
-                    # Update count, add to global dict
-                    Solid.links_count += 1
-                    Solid.links_dict[Solid.links_count] = link
-                    # Update lists
-                    self.connected_list += [other.id]
-                    other.connected_list += [self.id]
+                # Update count, add to global dict
+                Solid.links_count += 1
+                Solid.links_dict[Solid.links_count] = link
+                # Update lists
+                self.connected_list += [other.id]
+                other.connected_list += [self.id]
+        # Unalive particle if no connections
+        if self.connected_list == []:
+            self.unalive()
         
     # -------------------------------------------------------------------------
     # Main force model
@@ -115,11 +123,7 @@ class Solid(Particle):
     def update_acceleration(self):
         '''
         Calculates main acceleration term from force-based model of environment.
-        '''
-        # On first timestep, if solid is not connected to others, kill it
-        if self.manager.current_step == 0 and self.connected_list == []:
-            self.unalive()
-            
+        ''' 
         # Instantiate force term
         force_term = np.zeros(2)
 

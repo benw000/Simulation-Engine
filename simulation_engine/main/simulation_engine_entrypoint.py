@@ -21,7 +21,7 @@ SETUP_FUNC_DICT = {
 TYPE_DEFAULT_NUMS = {
         "nbody":["10"],
         "birds":["10", "2"],
-        "springs":["200"],
+        "springs":["100"],
         "pool":["10"],
         "evac":["30"],
 }
