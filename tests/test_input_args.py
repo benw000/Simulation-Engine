@@ -4,13 +4,13 @@ from unittest.mock import patch
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-import simulation_engine.main.simulation_engine_entrypoint 
-from simulation_engine.main.simulation_engine_entrypoint import (
+import simulation_engine.main.entrypoint 
+from simulation_engine.main.entrypoint import (
     IMPLEMENTED_TYPES, INTERACTIVE_SUPPORTED_TYPES, TYPE_DEFAULT_NUMS)
-from simulation_engine.main.simulation_engine_entrypoint import main as entrypoint_main
+from simulation_engine.main.entrypoint import main as entrypoint_main
 
 class TestInputArgs(unittest.TestCase):
-    ENTRY_SCRIPT = simulation_engine.main.simulation_engine_entrypoint.__file__
+    ENTRY_SCRIPT = simulation_engine.main.entrypoint.__file__
 
     # Common error types reference
     ERROR_CODES_LOOKUP = {

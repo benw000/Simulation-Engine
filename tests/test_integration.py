@@ -5,13 +5,13 @@ import shutil
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-import simulation_engine.main.simulation_engine_entrypoint 
-from simulation_engine.main.simulation_engine_entrypoint import (
+import simulation_engine.main.entrypoint 
+from simulation_engine.main.entrypoint import (
     IMPLEMENTED_TYPES, INTERACTIVE_SUPPORTED_TYPES, TYPE_DEFAULT_NUMS)
 
 class TestIntegration(unittest.TestCase):
     # Path to entrypoint
-    ENTRY_SCRIPT = simulation_engine.main.simulation_engine_entrypoint.__file__
+    ENTRY_SCRIPT = simulation_engine.main.entrypoint.__file__
 
     # Folders
     LOGS_FOLDER = "tests/data/Simulation_Logs/"

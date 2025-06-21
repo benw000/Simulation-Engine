@@ -1,13 +1,15 @@
 import os
 import sys
-import cv2
 import json
 import shutil
 import argparse
-from tqdm import tqdm
 from pathlib import Path
 from copy import deepcopy
 from datetime import datetime
+
+import cv2
+
+from tqdm import tqdm
 
 from rich import print
 from rich.table import Table
@@ -21,7 +23,7 @@ from matplotlib.animation import FuncAnimation
 # Check if ffmpeg is available on PATH, and tell matplotlib to use it
 ffmpeg_path = shutil.which("ffmpeg")
 if not ffmpeg_path:
-    sys.exit("Error: ffmpeg not found on system PATH. Please install ffmpeg and try again.")
+    sys.exit("Error: ffmpeg not found on system PATH. Please follow the instructions in the README to install ffmpeg, then try again.")
 import matplotlib as mpl
 mpl.rcParams['animation.ffmpeg_path'] = ffmpeg_path
 
