@@ -138,15 +138,11 @@ class Prey(Particle):
                 continue
             elif self.dist(bird) < self.prey_dist_thresh:
                 force_term += - self.unit_dirn(bird)*(self.prey_repulsion_force/self.dist(bird))
-            else:
-                continue
 
         # 3. Predator repulsion force - currently scales with 1/d
         for bird in Predator.iterate_class_instances():
             if self.dist(bird) < self.pred_detect_thresh:
                 force_term += - self.unit_dirn(bird)*(self.pred_repulsion_force/(np.sqrt(self.dist(bird))))
-            else:
-                continue
 
         # 4. Attraction to COM of prey
         com = Prey.centre_of_mass_class()
@@ -266,13 +262,9 @@ class Predator(Particle):
                 continue
             elif self.dist(bird) < Predator.pred_dist_thresh:
                 force_term += - self.unit_dirn(bird)*(self.pred_repulsion_force/(np.sqrt(self.dist(bird))))
-            else:
-                continue
 
         # Attraction to closest prey
-        if closest_bird is None:
-            pass
-        else:
+        if closest_bird is not None:
             if Predator.prediction:
                 target_position = closest_bird.position.copy()
                 target_velocity = closest_bird.velocity
