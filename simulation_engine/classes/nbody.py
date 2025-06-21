@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.stats import loguniform
 import matplotlib.pyplot as plt
 
 from simulation_engine.utils.errors import SimulationEngineInputError
@@ -87,8 +86,8 @@ class Star(Particle):
         '''
         super().__init__(position, velocity, unlinked)
         
-        # Get mass from a log uniform distribution betwen min and max mass supplied
-        self.mass = loguniform.rvs(Star.min_mass, Star.max_mass, size=1)[0]
+        # Get mass from distribution
+        self.mass = self.get_log_uniform_mass()
         # Get size from exponential function of mass
         self.size = 5 + 10 * (np.power(2,np.log10(self.mass))-1)
         # Get velocity from 1/mass * 10 * random direction
@@ -97,6 +96,17 @@ class Star(Particle):
         # Random gray colour for plotting between 0.5 and 1
         self.colour = np.random.rand()/2 + 0.5
 
+    # -------------------------------------------------------------------------
+    # Utils
+
+    def get_log_uniform_mass(self):
+        '''
+        Get a mass sampled from a log uniform distribution between
+        Star.min_mass and Star.max_mass
+        '''
+        rng = np.random.default_rng()
+        return np.exp(rng.uniform(np.log(self.__class__.min_mass), np.log(self.__class__.max_mass)))
+    
     # -------------------------------------------------------------------------
     # Main force model
     
