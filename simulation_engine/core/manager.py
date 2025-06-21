@@ -19,12 +19,13 @@ from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn, 
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.animation import FuncAnimation
+import matplotlib as mpl
+#mpl.use('TkAgg')  # cross-OS GUI backend
 
 # Check if ffmpeg is available on PATH, and tell matplotlib to use it
 ffmpeg_path = shutil.which("ffmpeg")
 if not ffmpeg_path:
     sys.exit("Error: ffmpeg not found on system PATH. Please follow the instructions in the README to install ffmpeg, then try again.")
-import matplotlib as mpl
 mpl.rcParams['animation.ffmpeg_path'] = ffmpeg_path
 
 # Hide user warnings

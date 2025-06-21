@@ -4,6 +4,7 @@ Simulation_Logs/
 
 # Caches
 __pycache__
+.DS_Store
 
 # Virtual environments
 venv/

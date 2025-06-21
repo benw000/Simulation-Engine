@@ -7,6 +7,7 @@ from pathvalidate import validate_filepath, validate_filename
 from pathvalidate.argparse import validate_filename_arg, validate_filepath_arg
 
 import simulation_engine
+from simulation_engine import types
 from simulation_engine.utils.errors import SimulationEngineInputError
 
 # ---- TO BE MAINTAINED ----
