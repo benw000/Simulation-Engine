@@ -6,17 +6,17 @@ from pathlib import Path
 from pathvalidate import validate_filepath, validate_filename
 from pathvalidate.argparse import validate_filename_arg, validate_filepath_arg
 
-import simulation_engine.classes
+import simulation_engine
 from simulation_engine.utils.errors import SimulationEngineInputError
 
 # ---- TO BE MAINTAINED ----
 # Map from string to module's setup
 SETUP_FUNC_DICT = {
-    "evac" : simulation_engine.classes.evac.setup,
-    "birds" : simulation_engine.classes.birds.setup,
-    "nbody" : simulation_engine.classes.nbody.setup,
-    "springs": simulation_engine.classes.springs.setup,
-    "pool": simulation_engine.classes.pool.setup,
+    "evac" : simulation_engine.types.evac.setup,
+    "birds" : simulation_engine.types.birds.setup,
+    "nbody" : simulation_engine.types.nbody.setup,
+    "springs": simulation_engine.types.springs.setup,
+    "pool": simulation_engine.types.pool.setup,
 }
 TYPE_DEFAULT_NUMS = {
         "nbody":["10"],

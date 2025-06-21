@@ -1,8 +1,8 @@
 import numpy as np
 
 from simulation_engine.utils.errors import SimulationEngineInputError
-from simulation_engine.classes import Particle
-from simulation_engine.utils.manager import Manager
+from simulation_engine.core.parents import Particle
+from simulation_engine.core.manager import Manager
 
 # -------------------------------------------------------------------------
 # Setup

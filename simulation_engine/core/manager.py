@@ -31,7 +31,7 @@ mpl.rcParams['animation.ffmpeg_path'] = ffmpeg_path
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-from simulation_engine.classes.parents import Particle, Environment
+from simulation_engine.core.parents import Particle, Environment
 
 class Manager:
     '''
