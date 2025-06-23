@@ -9,6 +9,7 @@ from pathvalidate.argparse import validate_filename_arg, validate_filepath_arg
 import simulation_engine
 from simulation_engine import types
 from simulation_engine.utils.errors import SimulationEngineInputError
+from simulation_engine.utils.help import HelpPrintout
 
 # ---- TO BE MAINTAINED ----
 # Map from string to module's setup
@@ -233,7 +234,7 @@ def get_type(args):
 
 def parse_args():
     # Create the argument parser
-    parser = argparse.ArgumentParser(description="General Simulation Engine input options.")
+    parser = argparse.ArgumentParser(description="General Simulation Engine input options.", add_help=False)
     
     def str2bool(v):
         if isinstance(v, bool):
@@ -269,7 +270,8 @@ def parse_args():
     parser.add_argument('--vid_path', type=validate_filepath_arg,   help="Custom file path for MP4 video", default=None)
     # Display after
     parser.add_argument('--display', type=str2bool, help="Whether to display the final rendered simulation, default True", default=True)
-
+    # Custom help
+    parser.add_argument('-h', action=HelpPrintout, help='Show custom help')
     # Return parsed arguments
     return parser.parse_args()
 
