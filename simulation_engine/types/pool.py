@@ -1,6 +1,7 @@
 import numpy as np
 
-from simulation_engine.core.parents import Particle, Wall, Target
+from simulation_engine.core.particle import Particle
+from simulation_engine.core.environment import Wall, Target
 from simulation_engine.core.manager import Manager
 from simulation_engine.utils.errors import SimulationEngineInputError
 

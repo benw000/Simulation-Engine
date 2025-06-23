@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from simulation_engine.utils.errors import SimulationEngineInputError
-from simulation_engine.core.parents import Particle
+from simulation_engine.core.particle import Particle
 from simulation_engine.core.manager import Manager
 
 # -------------------------------------------------------------------------
