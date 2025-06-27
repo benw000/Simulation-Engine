@@ -121,7 +121,7 @@ bengine run nbody -n 30
 - Bodies are initialised with random positions and velocities, and masses of different magnitudes, chosen from a log-uniform distribution scale. 
 - Each body feels a gravitational attraction towards every other body in the system. Larger bodies attract smaller ones, which accelerate towards them. 
 - To a first order level of approximation, these smaller bodies then engage in elliptic orbits around the larger body, or are deflected, shooting off on a parabolic trajectory. As more bodies shoot off, their density in our viewing window decreases.
-
+ 
 #### Forces
 - Gravitational attraction force - each body is attracted to every other body in the system, following Newton's law of universal gravitation: \
 $F = G \frac{Mass_1 Mass_2}{Distance^2}$.
@@ -339,12 +339,78 @@ Simulation-Engine
 
 ### Architecture & Features
 
+The following is an outline of the main classes and functions, and some of their standout features.
 
+#### `Particle`
+- Base class for all particles, contains core *geometric* and *numerical* logic: 
+  -  [Verlet Integration]() timestepping method used for simplicity and numerical stability:
+  $ x_{next} = 2 \cdot x_{current} - x_{last} + a \cdot dt^2 $
+  - Supports simulation over non-euclidean toroidal domain, as seen in [Predator/Prey](#predator-prey-model-).
+- Define simulation-specific particles with child classes, e.g. `Human(Particle)`. \
+These inherit the core logic and introduce specific force-based models to describe their dynamical system, along with plot functions for custom appearance when rendered.
 
+#### `Environment`
+- Base class similar to `Particle`, contains unchangeable environment elements that the particles respond to:
+  - `Wall(Environment)` subclass initialised between 2 vector endpoints, contains geometry for vector normals etc.
+  - `Target(Environment)` subclass initialised at a point, particles can be attracted to the target.
+
+#### `Manager`
+- Singleton class which oversees the pipeline of timestepping, writing/loading states and rendering.
+- Agnostic to specific simulation type, handled via dependency injection from `entrypoint.py`
+  - Stores universal state as a nested `Manager.state` dictionary of `Particle` and `Environment` subclass objects.
+- Flexible options for memory management of simulation history:
+  - By default saves history in memory as well as writing to log file. 
+  - Choose to disable either depending on system constraints on memory and/or storage.
+  - If neither, synchronous mode is selected, where frames are displayed as soon as they are computed.
+
+#### `Logger`
+- Logging class used by `Manager` to handle reading/writing simulation state from `.ndjson` logs.
+- Each entry to the `ndjson` corresponds to a `Manager.state` at a particular timestep -- serialised into `json` format using `to_dict()` and `from_dict()` methods from each particle/environment object.
+- Adjustable chunk size for memory-efficient reading of large logs.
+
+#### matplotlib
+- At each timestep we iterate through the current Manager.state dictionary, calling the `draw_plt` method of each object to plot onto a shared matplotlib axis.
+- We keep track of plot elements in `self.plt_artists` lists for each object.
+- We use matplotlib's `FuncAnimation` to compile frames into a rendered pop-up window video.
+
+#### Entrypoint
+- We alias the CLI command `bengine` to `main/entrypoint.py`, parsing the user arguments with `argparse` and a layer of custom validation functions.
+- The validated arguments are sent to the `setup()` function of the particular simulation type we're running (e.g. `evac.py`), which returns a `Manager` instance to run the pipeline with.
+
+#### Testing (unittest)
+- We conduct end-to-end integration tests for a near-exhaustive list of CLI argument combinations.
+- We also test the CLI with bad arguments to ensure errors are correctly thrown.
+
+#### Packaging
+- We package the project as a pip install-able module with `pyproject.toml`, which contains our small list of dependencies
+- Depending on future development this may be complemented by a Docker image, compiled binary or webap for easier sharing.
 
 ### Philosophy
 
+TODO: restructure philosophy points
+
+My primary aim with this package is to produce a clean, polished product of contained scope, which *just works*.
+
+The design is oriented around two points of interaction with the user/developer - the CLI and the specific simulation module, which should both have as little hurdles as possible.
+ - The CLI should allow for quick, visually pleasing simulation, with well-informed default options.
+ - The simulation module, eg `nbody.py`, should only need to describe features specific to that simulation; most shared features between simulation types should be obscured in `Particle` and `Manager`.
+
+I've employed a modular, object-oriented design with clear seperation of concerns. This should allow for sustained long term development effort as I extend this project - see [Next Steps](#-next-steps).
+
+
 ### Trade-offs
+
+
+
+### Lessons learnt / other title / Reflections
+
+vehicle
+
+Most of the work on this package has taken place in short bursts on my train journeys to and from work. It's been a large undertaking to refactor my *terrible*, *old* code and restructure for a more modular, scaleable design - in some sense I've learnt a lot about refactoring existing work, while avoiding the temptation to completely rewrite it. 
+It's been rewarding to build this system from the ground up, and witness the consequences of different   architectural decisions
+
+
+
 ---
 ## 🦆 Next steps
 - [x] Create comprehensive CLI with argument validation.
