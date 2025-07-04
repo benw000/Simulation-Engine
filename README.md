@@ -222,6 +222,8 @@ bengine run pool -n 1 -t 500
 
 [(Back to contents)](#-table-of-contents)
 
+---
+
 ## 🔧 Troubleshooting
 
 #### Pre-requisites
@@ -335,9 +337,15 @@ Simulation-Engine
 
 ## 🥸 Design
 
-![architecture](data/demo_videos/simulation_engine_architecture.png)
+My primary aim with this package is to produce a clean, polished product of contained scope, which *just works*.
+
+The design is oriented around two points of interaction with the user/developer - the CLI and the specific simulation module, which should both have as few hurdles as possible.
+ - The CLI should allow for quick, visually pleasing simulation, with well-informed default options.
+ - The simulation module, eg `evac.py`, need only describe features essential to that simulation; most shared features between simulation types should be obscured in `Particle` and `Manager`.
 
 ### Architecture & Features
+
+![architecture](data/demo_videos/simulation_engine_architecture.png)
 
 The following is an outline of the main classes and functions, and some of their standout features.
 
@@ -385,31 +393,20 @@ These inherit the core logic and introduce specific force-based models to descri
 - We package the project as a pip install-able module with `pyproject.toml`, which contains our small list of dependencies
 - Depending on future development this may be complemented by a Docker image, compiled binary or webap for easier sharing.
 
-### Philosophy
+### Reflections
 
-TODO: restructure philosophy points
+This project has primarily served as a vehicle for learning and applying software best practices. During development I've focused on a few things:
+- 🗄️ Modular, object-oriented design, with seperation of concerns
+- 👓 Clean and readable code
+- 📚 Comprehensive docstrings and documentation
+- ✅ Automated testing and input validation
+- 📦 Accessible packaging and end-to-end software design
 
-My primary aim with this package is to produce a clean, polished product of contained scope, which *just works*.
+Most of the work on this package has taken place in short bursts on my train journeys to and from work. It's been a large undertaking to improve my *terrible*, *old* code and restructure for a more modular, scaleable design - in some sense I've learnt a lot about refactoring existing work (whilst resisting the temptation to completely rewrite it!) 
 
-The design is oriented around two points of interaction with the user/developer - the CLI and the specific simulation module, which should both have as little hurdles as possible.
- - The CLI should allow for quick, visually pleasing simulation, with well-informed default options.
- - The simulation module, eg `nbody.py`, should only need to describe features specific to that simulation; most shared features between simulation types should be obscured in `Particle` and `Manager`.
+It's been rewarding to build this system from the ground up, and witness the consequences of different architectural decisions; some which rewardingly pay off and others which induce a headache.
 
-I've employed a modular, object-oriented design with clear seperation of concerns. This should allow for sustained long term development effort as I extend this project - see [Next Steps](#-next-steps).
-
-
-### Trade-offs
-
-
-
-### Lessons learnt / other title / Reflections
-
-vehicle
-
-Most of the work on this package has taken place in short bursts on my train journeys to and from work. It's been a large undertaking to refactor my *terrible*, *old* code and restructure for a more modular, scaleable design - in some sense I've learnt a lot about refactoring existing work, while avoiding the temptation to completely rewrite it. 
-It's been rewarding to build this system from the ground up, and witness the consequences of different   architectural decisions
-
-
+If you've got this far, thanks for reading! Feel free to contact me via [GitHub](https://github.com/benw000) or [LinkedIn](https://www.linkedin.com/in/ben-winstanley-ml-engineer/).
 
 ---
 ## 🦆 Next steps

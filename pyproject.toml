@@ -1,15 +1,16 @@
 [project]
 name = "bengine"
 version = "1.0.0"
-description = "General physics simulation engine for force-based particle models, built from scratch in Python."
+description = "General physics engine for force-based particle simulations. Run `bengine -h` for CLI options."
 authors = [{name="Ben Winstanley", email="benjamin.winstanley.007@gmail.com"}]
 requires-python = ">=3.9"
 dependencies = [
     "matplotlib==3.9.4",
     "numpy==1.24.1",
+    "opencv-python",
+    "pathvalidate==3.2.3",
     "rich==14.0.0",
     "tqdm==4.67.1",
-    "opencv-python"
 ]
 
 [project.scripts]
