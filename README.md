@@ -296,7 +296,7 @@ The following external python libraries are found in the `pyproject.toml` file a
 
 | Package | Version | Usage |
 | :---- | :----    | :---- |
-| [numpy](https://numpy.org/) | `1.24.1` | Main computation |
+| [numpy](https://numpy.org/) | `2.0.2` | Main computation |
 | [matplotlib](https://matplotlib.org/) | `3.9.4` | Rendering |
 | [opencv-python](https://opencv.org/) | `4.11.0.86` | Handling windows
 | [rich](https://github.com/Textualize/rich) | `14.0.0` | Pretty printing and tables
