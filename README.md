@@ -8,17 +8,17 @@
 
 <table>
   <tr>
-    <td><img src=data/demo_videos/evac_demo.gif alt="Evac tile" width="1000"/></td>
+    <td><img src=data/demo_videos/evac_demo.gif alt="Evac tile" width="600"/></td>
   </tr>
 </table>
 <table>
   <tr>
-    <td><img src=data/demo_videos/springs_demo.gif alt="Springs tile" width = "500"/></td>
-    <td><img src=data/demo_videos/nbody_demo.gif alt="Nbody tile" width="500"/></td>
+    <td><img src=data/demo_videos/springs_demo.gif alt="Springs tile" width = "300"/></td>
+    <td><img src=data/demo_videos/nbody_demo.gif alt="Nbody tile" width="300"/></td>
   </tr>
   <tr>
-    <td><img src=data/demo_videos/birds_demo.gif alt="Birds tile" width="500"/></td>
-    <td><img src=data/demo_videos/pool_demo.gif alt="Pool tile" width="500"/></td>
+    <td><img src=data/demo_videos/birds_demo.gif alt="Birds tile" width="300"/></td>
+    <td><img src=data/demo_videos/pool_demo.gif alt="Pool tile" width="300"/></td>
   </tr>
 </table>
 
@@ -32,7 +32,7 @@ So to save myself 30 whole minutes of *gruelling, predictable* setup, I've spent
 
 My simulation engine, or *bengine*, is a Python package featuring a commmand-line interface (CLI), where the user can choose from a number of preset simulation types to run - these pop up as little windows showing the final simulation on-loop:
 
-![alt text](data/demo_videos/springs_terminal_demo.gif)
+<img src="data/demo_videos/springs_terminal_demo.gif" width="500">
 
 
 Please have a quick scroll through the rest of this `README` if you'd like to learn more:

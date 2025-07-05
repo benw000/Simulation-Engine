@@ -174,13 +174,13 @@ def validate_filepath_args(args):
 
     # Vid path suffix
     if vid_name:
-        if not Path(vid_name).suffix == ".ndjson":
-            raise SimulationEngineInputError("If supplying (--vid_name) please use a .ndjson suffix")
+        if not Path(vid_name).suffix == ".mp4":
+            raise SimulationEngineInputError("If supplying (--vid_name) please use a .mp4 suffix")
 
     # Vid name suffix
     if vid_path:
-        if not Path(vid_path).suffix == ".ndjson":
-            raise SimulationEngineInputError("If supplying (--vid_path) please use a .ndjson suffix")
+        if not Path(vid_path).suffix == ".mp4":
+            raise SimulationEngineInputError("If supplying (--vid_path) please use a .mp4 suffix")
 
     # Vid folder
     if vid_folder:

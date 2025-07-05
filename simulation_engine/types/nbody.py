@@ -36,8 +36,8 @@ def setup_run(args, manager):
         raise SimulationEngineInputError("(-n, --nums) Please only supply 1 argument for population when using nbody simulation type")
     
     # Set Particle geometry attributes
-    Particle.env_x_lim = 1000
-    Particle.env_y_lim = 1000
+    Particle.env_x_lim = 100
+    Particle.env_y_lim = 100
     Particle.track_com = True
     Particle.torus = False
 
@@ -90,8 +90,8 @@ class Star(Particle):
         self.mass = self.get_log_uniform_mass()
         # Get size from exponential function of mass
         self.size = 5 + 10 * (np.power(2,np.log10(self.mass))-1)
-        # Get velocity from 1/mass * 10 * random direction
-        self.velocity = 10*np.array([np.random.rand(1)[0]*2 - 1,np.random.rand(1)[0]*2 - 1])
+        # Get velocity from 10 * random direction
+        self.velocity = 100*np.array([np.random.rand(1)[0]*2 - 1,np.random.rand(1)[0]*2 - 1])
 
         # Random gray colour for plotting between 0.5 and 1
         self.colour = np.random.rand()/2 + 0.5
