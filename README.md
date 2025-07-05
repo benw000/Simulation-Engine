@@ -363,12 +363,12 @@ These inherit the core logic and introduce specific force-based models to descri
 
 #### Packaging
 - We package the project as a pip install-able module with `pyproject.toml`, which contains our small list of dependencies
-- Depending on future development this may be complemented by a Docker image, compiled binary or webap for easier distribution.
+- Depending on future development this may be complemented by a Docker image, compiled binary or web app for easier distribution.
 
 ### Reflections
 
 This project has primarily served as a vehicle for learning and applying software best practices. During development I've focused on a few things:
-- 🗄️ Modular, object-oriented design, with seperation of concerns
+- 🗄️ Modular, object-oriented design, with separation of concerns
 - 👓 Clean and readable code
 - 📚 Comprehensive docstrings and documentation
 - ✅ Automated testing and input validation
@@ -376,7 +376,7 @@ This project has primarily served as a vehicle for learning and applying softwar
 
 Most of the work on this package has taken place in short bursts on my train journeys to and from work. It's been a large undertaking to improve my *terrible*, *old* code and restructure for a more modular, scaleable design - in some sense I've learnt a lot about refactoring existing work (whilst resisting the temptation to completely rewrite it!) 
 
-It's been rewarding to build this system from the ground up, and witness the consequences of different architectural decisions; some which rewardingly pay off and others which induce a headache.
+It's been rewarding to build this system from the ground up, and witness the consequences of different architectural decisions; some of which paid off nicely, while others induced a headache.
 
 If you've got this far, thanks for reading! Feel free to contact me via [GitHub](https://github.com/benw000) or [LinkedIn](https://www.linkedin.com/in/ben-winstanley-ml-engineer/).
 
@@ -388,7 +388,7 @@ If you've got this far, thanks for reading! Feel free to contact me via [GitHub]
 - [ ] Introduce interactive mode for some simulation types (birds, pool) via PyGame backend.
 - [ ] Create Reinforcement Learning gym to train intelligent birds with PyTorch.
 - [ ] Computational speedups with Numba JIT, further vectorisation.
-- [ ] Repackage as simple web-app.
+- [ ] Repackage as simple web app.
 - [ ] Open up to open-source support by making clear contribution guidance.
 
 [(Back to contents)](#-table-of-contents)
@@ -409,7 +409,7 @@ python -m pip install --upgrade pip setuptools wheel
 
 If no window appears after you see **"Rendering Progress: 1%"** in the command line, then Matplotlib may by default be using a non-interactive backend (Agg), which cannot display figures in a separate window.
 
-This is a known (and nuanced) issue which depends on your operating system and Python installation, and it falls outside the scope of this project to fully resolve. However, you can try the following:
+This is a known (and nuanced) issue which depends on your operating system and Python installation, and it falls outside the scope of this project to fully resolve. However, you could try the following:
 
 #### TkAgg GUI backend
 
@@ -429,7 +429,6 @@ sudo apt-get install python3-tk
 # (macOS)
 brew install python-tk
 ```
-Failing this, you may need to download reinstall Python with Tkinter support.
 
 #### Useful links
  - https://matplotlib.org/stable/users/explain/figure/backends.html
