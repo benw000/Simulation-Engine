@@ -1,7 +1,7 @@
 <div align="center">
 
 # Simulation Engine
-![Python](https://img.shields.io/badge/python-3.9%2B-blue) ![Version](https://img.shields.io/badge/Version-0.0.1-green)  ![License](https://img.shields.io/badge/license-MIT-red)
+![Python](https://img.shields.io/badge/python-3.9-blue) ![Version](https://img.shields.io/badge/Version-0.0.1-green)  ![License](https://img.shields.io/badge/license-MIT-red)
 *Oct 2024 - Present* &nbsp;&nbsp;|&nbsp; Ben Winstanley 🙋‍♂️ 
 </div>
 
@@ -36,7 +36,7 @@ My simulation engine, or *bengine*, is a Python package featuring a commmand-lin
 
 
 Please have a quick scroll through the rest of this `README` if you'd like to learn more:
-- See [Get Started](#get-started) and [Usage](#-usage) to install and try out the package! (this would make me very happy 🥺)
+- See [Get Started](#get-started) and [Usage](#-usage) to install and try out the package.
 - See [Examples](#-examples) for an overview of the different force-based models currently implemented. 🎓
 - See [Design Features](#-design-features), [Project Structure](#-project-structure), [Dependencies](#-dependencies), and [Next Steps](#-next-steps) for all the juicy details about the project. ☝️🤓
 
@@ -44,18 +44,25 @@ Please have a quick scroll through the rest of this `README` if you'd like to le
 
 ## 📚 Table of Contents
 
+- [Introduction](#-introduction)
 - [Get Started](#️-get-started)
 - [Usage](#-usage)
 - [Examples](#-examples)
-- [Design Features](#-design-features)
 - [Project Structure](#-project-structure)
-- [Troubleshooting](#-troubleshooting)
 - [Dependencies](#-dependencies)
+- [Design Features](#-design-features)
 - [Next Steps](#-next-steps)
+- [Troubleshooting](#-troubleshooting)
 - [License](#️-license)
 
 
 ##  🛠️ Get Started
+
+#### Prerequisites:
+- Python 3.9 - Consider using [pyenv](https://github.com/pyenv/pyenv) for managing multiple python versions on your system.
+- FFmpeg - if not installed please see [installation guide](#ffmpeg) below.
+
+#### Installation from source
 1. Clone the repository
 ```shell
 git clone https://github.com/benw000/Simulation-Engine.git
@@ -63,17 +70,22 @@ git clone https://github.com/benw000/Simulation-Engine.git
 2. Create and activate a virtual environment
 ```shell
 python -m venv venv
-
-# (Linux/macOS)
-source venv/bin/activate
-
-# (Windows)
+```
+Windows
+```shell
 venv\Scripts\activate
 ```
+Linux / macOS
+```shell
+source venv/bin/activate
+```
+
 
 3. Install as a package
 ```shell
 python -m pip install --upgrade pip setuptools wheel
+```
+```shell
 pip install -e .
 ```
 Done!
@@ -109,22 +121,23 @@ See the examples below for different simulation types available:
 ---
 ## 🌟 Examples:
 
-### N-body Gravitational Dynamics 💫 
-![nbody-gif](data/demo_videos/nbody_demo.gif)
+### 8-ball pool breaking simulation 🎱
+
+![pool-gif](data/demo_videos/pool_demo.gif)
 
 #### Run this 
 ```shell
-bengine run nbody -n 30
+bengine run pool -n 1 -t 500
 ```
+
 #### Description
 
-- Bodies are initialised with random positions and velocities, and masses of different magnitudes, chosen from a log-uniform distribution scale. 
-- Each body feels a gravitational attraction towards every other body in the system. Larger bodies attract smaller ones, which accelerate towards them. 
-- To a first order level of approximation, these smaller bodies then engage in elliptic orbits around the larger body, or are deflected, shooting off on a parabolic trajectory. As more bodies shoot off, their density in our viewing window decreases.
- 
-#### Forces
-- Gravitational attraction force - each body is attracted to every other body in the system, following Newton's law of universal gravitation: \
-$F = G \frac{Mass_1 Mass_2}{Distance^2}$.
+- Pool balls are initialised in the normal setup, the cue ball starting off firing into the triangle with a slight random vertical deviance. 
+- Balls repel off eachother, simulating elastic collision, and reflect off of the cushion walls, being removed if they hit the target of any pocket.
+
+**Forces**
+- Repulsion force between contacting balls - very strong but active within a small range, scaling with $ \frac{1}{Distance}$.
+- Normal force from wall - this models each cushion as a spring, with any compression from incoming balls resulting in an outwards normal force on the ball, following Hooke's law.
 
 ---
 
@@ -150,29 +163,6 @@ bengine run evac -n 40 -t 200
 - Deflection force from walls - force acting along length of wall towards an individual's target, prevents gridlock when a wall obscures the target.
 - Stochastic force - a small amount of noise is applied.
 - Note that additional bespoke forces would have to be specified in order to encode more intelligent, calculating behaviour.
-
----
-
-### Spring System Model 🔗
-
-![springs-gif](data/demo_videos/springs_demo.gif)
-
-#### Run this 
-```shell
-bengine run springs -n 50  -t 30
-```
-
-#### Description
-
-- Point particles are initialised at random positions on the plane; if a neighbour is within a spring length away, a spring is formed. Particles with no connections are culled before step 0. 
-- We see larger molecules start to form as networks of connected particles reach an equillibrium. 
-- Setting a larger spring length allows more particles to connect to eachother, increasing the complexity of the structures formed.
-
-**Forces** 
-- Elastic force following Hooke's law: $F = -k \cdot (Spring \  Extension)$ \
-This acts on both particles whenever the spring between them is in compression (red), or extension (yellow).
-- Damping force - directly opposes particle motion, scaling linearly with velocity.
-- Stochastic force - a small amount of random noise is applied to each particle.
 
 ---
 
@@ -202,99 +192,47 @@ bengine run -n 50 5 -t 200
 
 --- 
 
-### 8-ball pool breaking simulation 🎱
+### Spring System Model 🔗
 
-![pool-gif](data/demo_videos/pool_demo.gif)
+![springs-gif](data/demo_videos/springs_demo.gif)
 
 #### Run this 
 ```shell
-bengine run pool -n 1 -t 500
+bengine run springs -n 50  -t 30
 ```
 
 #### Description
 
-- Pool balls are initialised in the normal setup, the cue ball starting off firing into the triangle with a slight random vertical deviance. 
-- Balls repel off eachother, simulating elastic collision, and reflect off of the cushion walls, being removed if they hit the target of any pocket.
+- Point particles are initialised at random positions on the plane; if a neighbour is within a spring length away, a spring is formed. Particles with no connections are culled before step 0. 
+- We see larger molecules start to form as networks of connected particles reach an equillibrium. 
+- Setting a larger spring length allows more particles to connect to eachother, increasing the complexity of the structures formed.
 
-**Forces**
-- Repulsion force between contacting balls - very strong but active within a small range, scaling with $ \frac{1}{Distance}$.
-- Normal force from wall - this models each cushion as a spring, with any compression from incoming balls resulting in an outwards normal force on the ball, following Hooke's law.
-
-[(Back to contents)](#-table-of-contents)
-
----
-
-## 🔧 Troubleshooting
-
-#### Pre-requisites
-- Python 3.9 - similar versions should work fine, but I've only fully tested on 3.9.4. Please see the [pyenv guide](https://github.com/pyenv/pyenv) on how to manage multiple python versions on your system if you are using a different version.
-- FFmpeg - see [installation guide](#ffmpeg) below.
-
-#### Installing the package
-Please make sure your tools are up to date:
-```bash
-# (Inside virtual environment)
-python -m pip install --upgrade pip setuptools wheel
-```
-
-#### Matplotlib rendering
-(Linux / WSL) If you see:
-```
-UserWarning: Matplotlib is currently using agg, which is a non-GUI backend, so cannot show the figure.
-```
-Try using the `TkAgg` GUI rendering backend for `matplotlib` by setting the following environment variable in your shell:
-```bash
-export MPLBACKEND=TkAgg
-```
-If this doesn't work, you may need to download `tkinter` for python in order to use the `TkAgg` backend.
-```bash
-sudo apt-get install python3-tk
-```
-After this you may need to reinstall python, now with `tkinter`.
-
-#### Still stuck?
-Please [open an issue](https://github.com/benw000/Simulation-Engine/issues) on GitHub — include your OS, Python version, and any error messages. Thank you!
-
-[(Back to contents)](#-table-of-contents)
+**Forces** 
+- Elastic force following Hooke's law: $F = -k \cdot (Spring \  Extension)$ \
+This acts on both particles whenever the spring between them is in compression (red), or extension (yellow).
+- Damping force - directly opposes particle motion, scaling linearly with velocity.
+- Stochastic force - a small amount of random noise is applied to each particle.
 
 ---
-## 🔗 Dependencies
 
-### Python
-Python 3.9.7
+### N-body Gravitational Dynamics 💫 
+![nbody-gif](data/demo_videos/nbody_demo.gif)
 
-### External Python libraries
-The following external python libraries are found in the `pyproject.toml` file and will be installed automatically with `pip install bengine`.
-
-| Package | Version | Usage |
-| :---- | :----    | :---- |
-| [numpy](https://numpy.org/) | `1.24.1` | Main computation |
-| [matplotlib](https://matplotlib.org/) | `3.9.4` | Rendering |
-| [opencv-python](https://opencv.org/) | `4.11.0.86` | Handling windows
-| [rich](https://github.com/Textualize/rich) | `14.0.0` | Pretty printing and tables
-| [tqdm](https://github.com/tqdm/tqdm) | `4.67.1` | Progress bars |
-| [pathvalidate](https://pathvalidate.readthedocs.io/en/latest/) | `3.2.3` | Checking user-supplied paths 
-
----
-### FFmpeg
-
-We use the [FFmpeg](https://ffmpeg.org/) binary to save the rendered simulations as `.mp4` videos. \
-This can be installed via your OS package manager: 
-
-🪟 Windows: 
-https://ffmpeg.org/download.html
-
-🍎 macOS: 
+#### Run this 
 ```shell
-brew install ffmpeg
+bengine run nbody -n 30
 ```
-🐧 Ubuntu/Debian: 
-```shell
-sudo apt install ffmpeg
-```
+#### Description
+
+- Bodies are initialised with random positions and velocities, and masses of different magnitudes, chosen from a log-uniform distribution scale. 
+- Each body feels a gravitational attraction towards every other body in the system. Larger bodies attract smaller ones, which accelerate towards them. 
+- To a first order level of approximation, these smaller bodies then engage in elliptic orbits around the larger body, or are deflected, shooting off on a parabolic trajectory. As more bodies shoot off, their density in our viewing window decreases.
+ 
+#### Forces
+- Gravitational attraction force - each body is attracted to every other body in the system, following Newton's law of universal gravitation: \
+$F = G \frac{Mass_1 Mass_2}{Distance^2}$.
 
 [(Back to contents)](#-table-of-contents)
-
 
 ---
 ## 🌳 Project Structure
@@ -330,6 +268,40 @@ Simulation-Engine
 +-- LICENSE.md                 # ⚖️ License (MIT)
 +-- .gitignore                 # 🔕 Tells git to ignore certain local files
 ```
+
+[(Back to contents)](#-table-of-contents)
+
+---
+## 🔗 Dependencies
+
+#### FFmpeg
+
+We use the [FFmpeg](https://ffmpeg.org/) binary to save the rendered simulations as `.mp4` videos. \
+This can be installed via your OS package manager: 
+
+🪟 Windows: 
+https://ffmpeg.org/download.html
+
+🍎 macOS: 
+```shell
+brew install ffmpeg
+```
+🐧 Ubuntu/Debian: 
+```shell
+sudo apt install ffmpeg
+```
+
+#### External Python libraries
+The following external python libraries are found in the `pyproject.toml` file and will be installed automatically with `pip install bengine`.
+
+| Package | Version | Usage |
+| :---- | :----    | :---- |
+| [numpy](https://numpy.org/) | `1.24.1` | Main computation |
+| [matplotlib](https://matplotlib.org/) | `3.9.4` | Rendering |
+| [opencv-python](https://opencv.org/) | `4.11.0.86` | Handling windows
+| [rich](https://github.com/Textualize/rich) | `14.0.0` | Pretty printing and tables
+| [tqdm](https://github.com/tqdm/tqdm) | `4.67.1` | Progress bars |
+| [pathvalidate](https://pathvalidate.readthedocs.io/en/latest/) | `3.2.3` | Checking user-supplied paths 
 
 [(Back to contents)](#-table-of-contents)
 
@@ -391,7 +363,7 @@ These inherit the core logic and introduce specific force-based models to descri
 
 #### Packaging
 - We package the project as a pip install-able module with `pyproject.toml`, which contains our small list of dependencies
-- Depending on future development this may be complemented by a Docker image, compiled binary or webap for easier sharing.
+- Depending on future development this may be complemented by a Docker image, compiled binary or webap for easier distribution.
 
 ### Reflections
 
@@ -412,12 +384,58 @@ If you've got this far, thanks for reading! Feel free to contact me via [GitHub]
 ## 🦆 Next steps
 - [x] Create comprehensive CLI with argument validation.
 - [x] Create unittest test suite for automated testing of all modes.
-- [ ] Release as PyPI package.
+- [ ] Release as a PyPI package.
 - [ ] Introduce interactive mode for some simulation types (birds, pool) via PyGame backend.
-- [ ] Create RL gym to train intelligent birds with PyTorch.
+- [ ] Create Reinforcement Learning gym to train intelligent birds with PyTorch.
 - [ ] Computational speedups with Numba JIT, further vectorisation.
-- [ ] Implement as simple web-app.
+- [ ] Repackage as simple web-app.
 - [ ] Open up to open-source support by making clear contribution guidance.
+
+[(Back to contents)](#-table-of-contents)
+
+---
+
+## 🔧 Troubleshooting
+
+Make sure your tools are up to date:
+```shell
+# (Linux / macOS)
+sudo apt-get update
+# Python (inside virtual environment)
+python -m pip install --upgrade pip setuptools wheel
+```
+
+### Matplotlib rendering issues
+
+If no window appears after you see **"Rendering Progress: 1%"** in the command line, then Matplotlib may by default be using a non-interactive backend (Agg), which cannot display figures in a separate window.
+
+This is a known (and nuanced) issue which depends on your operating system and Python installation, and it falls outside the scope of this project to fully resolve. However, you can try the following:
+
+#### TkAgg GUI backend
+
+Try using the `TkAgg` GUI rendering backend for `matplotlib` by setting the following environment variable in your shell before running the program:
+
+```shell
+# (Linux / macOS)
+export MPLBACKEND=TkAgg
+# (Windows)
+set MPLBACKEND=TkAgg
+```
+
+If this doesn't work, you may need to install the `tkinter` toolkit
+```shell
+# (Linux)
+sudo apt-get install python3-tk
+# (macOS)
+brew install python-tk
+```
+Failing this, you may need to download reinstall Python with Tkinter support.
+
+#### Useful links
+ - https://matplotlib.org/stable/users/explain/figure/backends.html
+ - https://stackoverflow.com/questions/56656777/userwarning-matplotlib-is-currently-using-agg-which-is-a-non-gui-backend-so_
+ - https://stackoverflow.com/questions/4783810/install-tkinter-for-python 
+ - https://www.sqlpac.com/en/documents/python-matplotlib-installation-virtual-environment-X11-forwarding.html
 
 [(Back to contents)](#-table-of-contents)
 
