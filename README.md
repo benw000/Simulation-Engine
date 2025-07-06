@@ -1,7 +1,7 @@
 <div align="center">
 
 # Simulation Engine
-![Python](https://img.shields.io/badge/python-3.9-blue) ![Version](https://img.shields.io/badge/Version-0.0.1-green)  ![License](https://img.shields.io/badge/license-MIT-red)
+![Python](https://img.shields.io/badge/python-3.9-blue) ![Version](https://img.shields.io/badge/Version-1.0.0-green)  ![License](https://img.shields.io/badge/license-MIT-red)
 *Oct 2024 - Present* &nbsp;&nbsp;|&nbsp; Ben Winstanley 🙋‍♂️ 
 </div>
 
@@ -62,11 +62,37 @@ Please have a quick scroll through the rest of this `README` if you'd like to le
 - Python 3.9 - Consider using [pyenv](https://github.com/pyenv/pyenv) for managing multiple python versions on your system.
 - FFmpeg - if not installed please see [installation guide](#ffmpeg) below.
 
-#### Installation from source
-1. Clone the repository
+#### Install with pip
+1. Create and activate a virtual environment
+```shell
+python -m venv venv
+```
+Windows
+```shell
+venv\Scripts\activate
+```
+Linux / macOS
+```shell
+source venv/bin/activate
+```
+2. Install package from PyPI
+```shell
+pip install --upgrade pip
+```
+```shell
+pip install bengine
+```
+Done!
+
+#### (OR) Build from source
+1. Clone the repository and move inside
 ```shell
 git clone https://github.com/benw000/Simulation-Engine.git
 ```
+```shell
+cd Simulation-Engine
+```
+
 2. Create and activate a virtual environment
 ```shell
 python -m venv venv
@@ -80,8 +106,7 @@ Linux / macOS
 source venv/bin/activate
 ```
 
-
-3. Install as a package
+3. Install repository as a package from `pyproject.toml`
 ```shell
 python -m pip install --upgrade pip setuptools wheel
 ```
@@ -384,7 +409,7 @@ If you've got this far, thanks for reading! Feel free to contact me via [GitHub]
 ## 🦆 Next steps
 - [x] Create comprehensive CLI with argument validation.
 - [x] Create unittest test suite for automated testing of all modes.
-- [ ] Release as a PyPI package.
+- [x] Release as a PyPI package.
 - [ ] Introduce interactive mode for some simulation types (birds, pool) via PyGame backend.
 - [ ] Create Reinforcement Learning gym to train intelligent birds with PyTorch.
 - [ ] Computational speedups with Numba JIT, further vectorisation.
